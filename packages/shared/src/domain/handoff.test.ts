@@ -4,6 +4,7 @@ import {
   buildHandoffUrl,
   captureHandoff,
   parseHandoffFragment,
+  PROD_APP_URLS,
   resolveAppUrl,
   takePendingHandoff,
 } from './handoff'
@@ -24,9 +25,9 @@ describe('resolveAppUrl', () => {
     expect(resolveAppUrl('panel', '', true)).toBe(DEV_APP_URLS.panel)
   })
 
-  it('returns null when unset in production', () => {
-    expect(resolveAppUrl('app', undefined, false)).toBeNull()
-    expect(resolveAppUrl('panel', '   ', false)).toBeNull()
+  it('falls back to the production URL when unset in production', () => {
+    expect(resolveAppUrl('app', undefined, false)).toBe(PROD_APP_URLS.app)
+    expect(resolveAppUrl('panel', '   ', false)).toBe(PROD_APP_URLS.panel)
   })
 
   it('prefers the configured URL over the dev fallback', () => {

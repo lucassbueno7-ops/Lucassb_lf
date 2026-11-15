@@ -18,11 +18,17 @@ export const DEV_APP_URLS: Record<AppTarget, string> = {
   panel: 'http://localhost:5174',
 }
 
-/** Base URL of the target app: configured value, dev fallback, or null (production without config). */
-export function resolveAppUrl(target: AppTarget, configured: string | undefined, isDev: boolean): string | null {
+/** Production deploys (Vercel). VITE_APP_URL / VITE_PANEL_URL override them, e.g. for a custom domain. */
+export const PROD_APP_URLS: Record<AppTarget, string> = {
+  app: 'https://lucassb-lf.vercel.app',
+  panel: 'https://lucassb-lf-panel.vercel.app',
+}
+
+/** Base URL of the target app: configured value, otherwise the dev or production default. */
+export function resolveAppUrl(target: AppTarget, configured: string | undefined, isDev: boolean): string {
   const value = configured?.trim()
   if (value) return value.replace(/\/+$/, '')
-  return isDev ? DEV_APP_URLS[target] : null
+  return isDev ? DEV_APP_URLS[target] : PROD_APP_URLS[target]
 }
 
 function normalizePath(path: string): string {
