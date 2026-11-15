@@ -1,18 +1,36 @@
 # Trainer App
 
-PWA for a personal trainer and their clients. Trainers manage clients, exercise catalog and routines; clients log workouts, see progression and track body weight. UI copy is in Spanish.
+Personal trainer platform split into two separately deployable apps: a **client PWA** (`apps/app`) and a **trainer panel** (`apps/panel`), sharing code through `packages/shared`. UI copy is in Spanish.
 
-Stack: React + Vite + TypeScript, Tailwind v4, react-router, Supabase (Auth, Postgres + RLS, Edge Functions), recharts, vite-plugin-pwa, Vitest.
+Stack: React + Vite + TypeScript, Tailwind v4, react-router, Supabase (Auth, Postgres + RLS, Edge Functions), recharts, vite-plugin-pwa (client app only), Vitest. Managed as an npm workspaces monorepo.
+
+## Structure
+
+```
+apps/
+  app/       client PWA: Hoy, Semana, Rutina, Progreso, Mi peso, workout day, login, /set-password
+  panel/     trainer panel: clients, client detail, exercise catalog, routine editor, login (plain SPA)
+packages/
+  shared/    @trainer/shared, consumed as TS source (no build step)
+             domain/ (pure logic + tests), lib/ (supabase client), auth/, ui/, charts/, data-api.ts
+supabase/    migrations, edge function, seed
+scripts/     generate-icons.mjs (PNG icons for apps/app)
+```
+
+Role guarding: the app only admits `role = client` (trainers see a notice pointing to the panel) and the panel only admits `role = trainer` (clients see a notice pointing to the app, with sign-out). Optionally set `VITE_PANEL_URL` (in the app) and `VITE_APP_URL` (in the panel) to show a link in those notices.
 
 ## Local development
 
 ```bash
-npm install
-cp .env.example .env   # fill in your Supabase URL and anon key
-npm run dev
+npm install            # from the repo root, installs every workspace
+cp .env.example .env   # fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
+npm run dev:app        # client app   -> http://localhost:5173
+npm run dev:panel      # trainer panel -> http://localhost:5174
 ```
 
-Scripts: `npm run build`, `npm test`, `npm run lint`, `npm run icons` (regenerates PNG icons from `public/icon.svg`).
+A single `.env` at the repo root serves both apps (each Vite config sets `envDir` to the root).
+
+Scripts (from the root): `npm run build` (both apps), `npm test` (all workspaces), `npm run lint`, `npm run icons` (regenerates PNG icons from `apps/app/public/icon.svg`).
 
 ## Supabase setup
 
@@ -21,10 +39,10 @@ Scripts: `npm run build`, `npm test`, `npm run lint`, `npm run icons` (regenerat
 3. **Deploy the edge function**:
    ```bash
    supabase functions deploy invite-client
-   supabase secrets set SITE_URL=https://your-app-domain.com
+   supabase secrets set SITE_URL=https://your-client-app-domain.com   # the CLIENT app URL
    ```
    `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically. The service role key never reaches the frontend.
-4. **Auth -> URL Configuration**: set *Site URL* to your deployed URL and add `https://your-app-domain.com/set-password` (and `http://localhost:5173/set-password` for dev) to *Redirect URLs*.
+4. **Auth -> URL Configuration**: set *Site URL* to the deployed **client app** URL and add `https://your-app-domain.com/set-password` (and `http://localhost:5173/set-password` for dev) to *Redirect URLs*. Also add the panel URL (and `http://localhost:5174` for dev) to *Redirect URLs*.
 5. **Use custom SMTP** (Auth -> SMTP Settings, e.g. Resend). The default Supabase SMTP is heavily rate-limited and only sends to team members, so invites will fail in practice. Optionally customize the *Invite user* email template (Spanish copy).
 6. **Create the first trainer**: sign up a user (Auth -> Users -> Add user, with password), then promote it in the SQL editor:
    ```sql
@@ -34,25 +52,26 @@ Scripts: `npm run build`, `npm test`, `npm run lint`, `npm run icons` (regenerat
    The trigger creates every profile as `client`; `role` and `trainer_id` cannot be changed from the app (only via SQL editor / service role).
 7. Optional: `supabase/seed.sql` inserts common exercises for a trainer (edit the email first).
 
-## Deploy the frontend
+## Deploy the frontend (Vercel)
 
-Vercel or Netlify, build command `npm run build`, output `dist`. SPA fallbacks are included: `vercel.json` and `public/_redirects`. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in the host's environment variables.
+Create **two Vercel projects from the same repository**:
+
+| Project | Root Directory | Build command | Output directory |
+| --- | --- | --- | --- |
+| client app | `apps/app` | `npm run build` | `dist` |
+| trainer panel | `apps/panel` | `npm run build` | `dist` |
+
+- Keep Vercel's "Include source files outside of the Root Directory" enabled (default) so `packages/shared` and the root `package-lock.json` are available. Vercel runs `npm install` at the workspace root automatically.
+- Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in **each** project's environment variables.
+- SPA fallbacks: each app has its own `vercel.json`; `apps/app/public/_redirects` covers Netlify.
+- Supabase Auth **Site URL**, the `/set-password` redirect URL and the edge function `SITE_URL` secret must point to the **client app** URL, because `/set-password` (invite flow) lives there. Add the panel URL to *Redirect URLs* too.
 
 ## Installing the PWA
 
+The PWA is the client app (`apps/app`) only.
+
 - **Android (Chrome)**: open the app, menu (three dots) -> *Instalar aplicacion* / *Agregar a la pantalla principal*.
 - **iOS (Safari)**: open the app in Safari, tap *Compartir* -> *Agregar a pantalla de inicio*.
-
-## Structure
-
-```
-src/
-  domain/      pure, unit-tested logic (progression, BMI, sorting, dates)
-  features/    auth, trainer, client (pages + per-feature api.ts)
-  shared/      UI atoms, layout, RequireRole guard, shared presentational components
-  lib/         supabase client
-supabase/      migrations, edge function, seed
-```
 
 ## Security notes
 

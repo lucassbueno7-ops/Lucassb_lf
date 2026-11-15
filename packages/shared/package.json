@@ -1,0 +1,26 @@
+{
+  "name": "@trainer/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./domain": "./src/domain/index.ts",
+    "./supabase": "./src/lib/supabase.ts",
+    "./auth": "./src/auth/index.ts",
+    "./ui": "./src/ui/index.ts",
+    "./charts": "./src/charts/index.ts",
+    "./data-api": "./src/data-api.ts",
+    "./test-setup": "./src/test/setup.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.119.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.5",
+    "recharts": "3.10.1"
+  }
+}
