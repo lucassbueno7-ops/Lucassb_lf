@@ -73,14 +73,19 @@ Deno.serve(async (req) => {
   }
 
   const redirectTo = `${siteUrl}/set-password`
+  // Share a link to OUR app carrying the hashed token, not Supabase's /verify link:
+  // chat previews (WhatsApp) and mail scanners open shared URLs, which would consume
+  // a one-time /verify link. The app verifies the token only when the person clicks.
+  const appLink = (hashedToken: string, type: 'invite' | 'recovery') =>
+    `${redirectTo}?${new URLSearchParams({ token_hash: hashedToken, type })}`
 
   const invite = await admin.auth.admin.generateLink({
     type: 'invite',
     email,
     options: { data: { full_name: fullName, trainer_id: trainerId }, redirectTo },
   })
-  if (!invite.error && invite.data?.properties?.action_link) {
-    return json({ link: invite.data.properties.action_link, email, existing: false })
+  if (!invite.error && invite.data?.properties?.hashed_token) {
+    return json({ link: appLink(invite.data.properties.hashed_token, 'invite'), email, existing: false })
   }
 
   const alreadyRegistered =
@@ -96,7 +101,7 @@ Deno.serve(async (req) => {
   // trainer's own client (or any client when the caller is an admin).
   const recovery = await admin.auth.admin.generateLink({ type: 'recovery', email, options: { redirectTo } })
   const existingUserId = recovery.data?.user?.id
-  if (recovery.error || !existingUserId || !recovery.data?.properties?.action_link) {
+  if (recovery.error || !existingUserId || !recovery.data?.properties?.hashed_token) {
     console.error('generateLink recovery failed', recovery.error?.message)
     return json({ error: 'No se pudo generar el link' }, 400)
   }
@@ -113,5 +118,5 @@ Deno.serve(async (req) => {
       return json({ error: 'Ese email ya está registrado con otro entrenador' }, 409)
     }
   }
-  return json({ link: recovery.data.properties.action_link, email, existing: true })
+  return json({ link: appLink(recovery.data.properties.hashed_token, 'recovery'), email, existing: true })
 })

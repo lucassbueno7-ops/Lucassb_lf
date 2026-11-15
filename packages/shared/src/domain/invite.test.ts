@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { buildInviteMessage, whatsappShareUrl } from './invite'
+import { buildInviteMessage, parseInviteParams, whatsappShareUrl } from './invite'
+
+describe('parseInviteParams', () => {
+  it('reads an invite token hash', () => {
+    expect(parseInviteParams('?token_hash=abc123&type=invite')).toEqual({ tokenHash: 'abc123', type: 'invite' })
+  })
+
+  it('reads a recovery token hash', () => {
+    expect(parseInviteParams('?token_hash=xyz&type=recovery')).toEqual({ tokenHash: 'xyz', type: 'recovery' })
+  })
+
+  it('rejects a missing token or an unsupported type', () => {
+    expect(parseInviteParams('')).toBeNull()
+    expect(parseInviteParams('?type=invite')).toBeNull()
+    expect(parseInviteParams('?token_hash=abc&type=signup')).toBeNull()
+    expect(parseInviteParams('?token_hash=abc')).toBeNull()
+  })
+})
 
 describe('buildInviteMessage', () => {
   it('greets the client by name and includes the link', () => {
