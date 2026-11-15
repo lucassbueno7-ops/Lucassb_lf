@@ -41,9 +41,17 @@ export async function updateClientProfile(clientId: string, patch: { full_name: 
   if (error) throw error
 }
 
-export async function inviteClient(email: string, fullName: string) {
+export interface InviteResult {
+  link: string
+  email: string
+  /** True when the user already existed and the link is a password reset. */
+  existing: boolean
+}
+
+/** Generates an invite link (no email is sent). Admins must pass the trainer the client belongs to. */
+export async function inviteClient(email: string, fullName: string, trainerId?: string): Promise<InviteResult> {
   const { data, error } = await supabase.functions.invoke('invite-client', {
-    body: { email, full_name: fullName },
+    body: { email, full_name: fullName, ...(trainerId ? { trainer_id: trainerId } : {}) },
   })
   if (error) {
     // FunctionsHttpError carries the response; try to surface the server message.
@@ -52,9 +60,9 @@ export async function inviteClient(email: string, fullName: string) {
       const body = (await ctx.json().catch(() => null)) as { error?: string } | null
       if (body?.error) throw new Error(body.error)
     }
-    throw error
+    throw new Error('No se pudo generar la invitación. Probá de nuevo.')
   }
-  return data as { user_id: string | null }
+  return data as InviteResult
 }
 
 export async function addBodyMetric(clientId: string, weightKg: number, measuredAt: string) {

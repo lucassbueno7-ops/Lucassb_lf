@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { AuthShell, updatePassword, useAuth } from '@trainer/shared/auth'
 import { Button, ErrorMessage, Spinner, TextField } from '@trainer/shared/ui'
 
-/** Landing page for invite and password recovery links. */
+/**
+ * Landing page for invite and password recovery links. supabase-js consumes the auth
+ * fragment/code on load (see AuthProvider); an expired or used link leaves no session.
+ */
 export function SetPasswordPage() {
   const { session, loading, refreshProfile } = useAuth()
   const navigate = useNavigate()
@@ -15,8 +18,8 @@ export function SetPasswordPage() {
   if (loading) return <Spinner />
   if (!session) {
     return (
-      <AuthShell title="Enlace inválido o vencido">
-        <p className="text-center text-sm text-muted-foreground">Pedile a tu entrenador que te envíe una nueva invitación.</p>
+      <AuthShell title="Link inválido o vencido">
+        <p className="text-center text-sm text-muted-foreground">El link venció o ya fue usado. Pedile a tu entrenador uno nuevo.</p>
       </AuthShell>
     )
   }

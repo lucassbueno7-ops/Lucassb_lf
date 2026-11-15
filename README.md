@@ -39,11 +39,11 @@ Scripts (from the root): `npm run build` (both apps), `npm test` (all workspaces
 3. **Deploy the edge function**:
    ```bash
    supabase functions deploy invite-client
-   supabase secrets set SITE_URL=https://your-client-app-domain.com   # the CLIENT app URL
+   supabase secrets set SITE_URL=https://lucassb-lf.vercel.app   # the CLIENT app URL
    ```
    `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically. The service role key never reaches the frontend.
 4. **Auth -> URL Configuration**: set *Site URL* to the deployed **client app** URL and add `https://your-app-domain.com/set-password` (and `http://localhost:5173/set-password` for dev) to *Redirect URLs*. Also add the panel URL (and `http://localhost:5174` for dev) to *Redirect URLs*.
-5. **Use custom SMTP** (Auth -> SMTP Settings, e.g. Resend). The default Supabase SMTP is heavily rate-limited and only sends to team members, so invites will fail in practice. Optionally customize the *Invite user* email template (Spanish copy).
+5. **Invites need no SMTP.** `invite-client` does not send email: it generates the invite link (`auth.admin.generateLink`) and the panel shows it so the trainer copies it or sends it by WhatsApp. If the client already exists, the link is a password-recovery link instead. Recommended: set *Auth -> Providers -> Email -> Email OTP expiration* to `86400` (24 hours); each link works once.
 6. **Create the first trainer**: sign up a user (Auth -> Users -> Add user, with password), then promote it in the SQL editor:
    ```sql
    update profiles set role = 'trainer'
@@ -56,7 +56,7 @@ Scripts (from the root): `npm run build` (both apps), `npm test` (all workspaces
 
 - `client`: uses the client app. Reads/writes only their own data.
 - `trainer`: uses the panel. Only their own clients and their own exercises.
-- `admin`: uses the panel. Full read/write on every table and the `exercise-images` bucket (all trainers' clients, profiles, exercises, routines, logs). Intended for the developer to inspect real data. Admins cannot send invites (the `invite-client` function stays trainer-only). Admins can change a profile's `trainer_id`, but nobody can change `role` or `id` from the app.
+- `admin`: uses the panel. Full read/write on every table and the `exercise-images` bucket (all trainers' clients, profiles, exercises, routines, logs). Intended for the developer to inspect real data. Admins can generate invites too, choosing the trainer the client belongs to. Admins can change a profile's `trainer_id`, but nobody can change `role` or `id` from the app.
 
 ### Role vs. `trainer_id`
 
@@ -103,4 +103,4 @@ The PWA is the client app (`apps/app`) only.
 
 - RLS is enabled on every table. Admins (`is_admin()`) get a separate `*_admin_all` policy per table. Trainers access only clients whose `profiles.trainer_id` is their id (`is_trainer_of()`, SECURITY DEFINER, avoids recursive policies).
 - Clients can read and insert their own workout logs and body metrics; workout logs have no client update/delete policy (append-only history).
-- Invites go through the `invite-client` edge function, which verifies the caller is a trainer.
+- Invites go through the `invite-client` edge function, which verifies the caller is a trainer (or an admin, who must name a trainer) and returns a shareable link; no email is sent.

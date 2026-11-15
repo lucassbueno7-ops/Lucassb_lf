@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, CircleCheck, TriangleAlert, UserPlus, Users } from 'lucide-react'
-import { addDays, attendanceBadge, attendanceSummary, displayPersonName, toISODate, trainerName, type AttendanceSummary, type Role } from '@trainer/shared/domain'
+import { Check, ChevronRight, CircleCheck, Copy, MessageCircle, TriangleAlert, UserPlus, Users } from 'lucide-react'
+import { addDays, attendanceBadge, buildInviteMessage, whatsappShareUrl, attendanceSummary, displayPersonName, toISODate, trainerName, type AttendanceSummary, type Role } from '@trainer/shared/domain'
 import { lastWorkoutLabel } from '@trainer/shared/charts'
 import { useAuth, type Profile } from '@trainer/shared/auth'
 import {
@@ -10,10 +10,11 @@ import {
   Card,
   EmptyState,
   ErrorMessage,
+  Label,
+  NativeSelect,
   PageHeader,
   Section,
   Skeleton,
-  SuccessMessage,
   Table,
   TableBody,
   TableCell,
@@ -24,45 +25,98 @@ import {
   cn,
   useAsync,
 } from '@trainer/shared/ui'
-import { inviteClient, listClients, listScheduledDays, listTrainers, listTrainingDates } from '../api'
+import { inviteClient, type InviteResult, listClients, listScheduledDays, listTrainers, listTrainingDates } from '../api'
 
-function InviteClientForm({ onInvited }: { onInvited: () => void }) {
+function InviteResultCard({ name, result }: { name: string; result: InviteResult }) {
+  const [copied, setCopied] = useState(false)
+  const message = buildInviteMessage(name, result.link)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.link)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 space-y-3 rounded-lg border bg-muted/40 p-3">
+      <TextField label="Link de invitación" readOnly value={result.link} onFocus={(e) => e.currentTarget.select()} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={copy}>
+          {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+          {copied ? '¡Copiado!' : 'Copiar'}
+        </Button>
+        <Button asChild>
+          <a href={whatsappShareUrl(message)} target="_blank" rel="noreferrer">
+            <MessageCircle aria-hidden />
+            Enviar por WhatsApp
+          </a>
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">El link vence en 24 horas y sirve una sola vez.</p>
+      {result.existing && (
+        <p className="text-xs text-muted-foreground">Este cliente ya existía: el link le permite restablecer su contraseña.</p>
+      )}
+    </div>
+  )
+}
+
+function InviteClientForm({ isAdmin, onInvited }: { isAdmin: boolean; onInvited: () => void }) {
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
+  const [trainerId, setTrainerId] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [result, setResult] = useState<{ name: string; data: InviteResult } | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const trainers = useAsync(() => (isAdmin ? listTrainers() : Promise.resolve([] as Profile[])), [isAdmin])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
-    setSuccess(null)
+    setResult(null)
     setSubmitting(true)
     try {
-      await inviteClient(email.trim(), fullName.trim())
-      setSuccess(`Invitación enviada a ${email.trim()}.`)
+      const name = fullName.trim()
+      const data = await inviteClient(email.trim(), name, isAdmin ? trainerId : undefined)
+      setResult({ name, data })
       setEmail('')
       setFullName('')
       onInvited()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo enviar la invitación.')
+      setError(err instanceof Error ? err.message : 'No se pudo generar la invitación.')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Section title="Invitar cliente" description="Le llega un email para elegir su contraseña.">
+    <Section title="Invitar cliente" description="Generá un link y compartilo por WhatsApp para que elija su contraseña.">
       <form onSubmit={onSubmit} className="space-y-3">
         <TextField label="Nombre" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
         <TextField label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        {isAdmin && (
+          <div className="grid gap-1.5">
+            <Label htmlFor="invite-trainer">Entrenador</Label>
+            <NativeSelect id="invite-trainer" required value={trainerId} onChange={(e) => setTrainerId(e.target.value)}>
+              <option value="">Elegí un entrenador</option>
+              {(trainers.data ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name || 'Sin nombre'}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        )}
         <ErrorMessage message={error} />
-        <SuccessMessage message={success} />
         <Button type="submit" className="w-full" disabled={submitting}>
           <UserPlus aria-hidden />
-          {submitting ? 'Enviando...' : 'Enviar invitación'}
+          {submitting ? 'Generando...' : 'Generar invitación'}
         </Button>
       </form>
+      {result && <InviteResultCard name={result.name} result={result.data} />}
     </Section>
   )
 }
@@ -230,13 +284,7 @@ export function ClientsPage() {
           )}
           {data && <ClientsList rows={data} isAdmin={isAdmin} viewerId={viewerId} />}
         </div>
-        {isAdmin ? (
-          <Section title="Invitar cliente">
-            <p className="text-sm text-muted-foreground">Las invitaciones las envía el entrenador.</p>
-          </Section>
-        ) : (
-          <InviteClientForm onInvited={reload} />
-        )}
+        <InviteClientForm isAdmin={isAdmin} onInvited={reload} />
       </div>
     </>
   )
