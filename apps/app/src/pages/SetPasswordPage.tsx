@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
-import { updatePassword, useAuth } from '@trainer/shared/auth'
+import { AuthShell, updatePassword, useAuth } from '@trainer/shared/auth'
+import { Button, ErrorMessage, Spinner, TextField } from '@trainer/shared/ui'
 
 /** Landing page for invite and password recovery links. */
 export function SetPasswordPage() {
@@ -15,11 +15,9 @@ export function SetPasswordPage() {
   if (loading) return <Spinner />
   if (!session) {
     return (
-      <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-4">
-        <Card title="Enlace inválido o vencido">
-          <p className="text-sm text-slate-600">Pedile a tu entrenador que te envíe una nueva invitación.</p>
-        </Card>
-      </div>
+      <AuthShell title="Enlace inválido o vencido">
+        <p className="text-center text-sm text-muted-foreground">Pedile a tu entrenador que te envíe una nueva invitación.</p>
+      </AuthShell>
     )
   }
 
@@ -41,17 +39,15 @@ export function SetPasswordPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-4">
-      <Card title="Elegí tu contraseña">
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Input label="Contraseña nueva" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-          <Input label="Repetir contraseña" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          <ErrorMessage message={error} />
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Guardando...' : 'Guardar y entrar'}
-          </Button>
-        </form>
-      </Card>
-    </div>
+    <AuthShell title="Elegí tu contraseña" subtitle="Mínimo 8 caracteres.">
+      <form onSubmit={onSubmit} className="space-y-4">
+        <TextField label="Contraseña nueva" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        <TextField label="Repetir contraseña" type="password" autoComplete="new-password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <ErrorMessage message={error} />
+        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Guardando...' : 'Guardar y entrar'}
+        </Button>
+      </form>
+    </AuthShell>
   )
 }

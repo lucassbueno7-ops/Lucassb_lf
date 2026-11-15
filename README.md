@@ -17,7 +17,7 @@ supabase/    migrations, edge function, seed
 scripts/     generate-icons.mjs (PNG icons for apps/app)
 ```
 
-Role guarding: the app only admits `role = client` (trainers see a notice pointing to the panel) and the panel admits `role = trainer` and `role = admin` (clients see a notice pointing to the app, with sign-out). Optionally set `VITE_PANEL_URL` (in the app) and `VITE_APP_URL` (in the panel) to show a link in those notices.
+Role guarding: the panel admits `role = trainer` and `role = admin` (clients see a notice pointing to the app, with sign-out). The app admits every role: clients use it, trainers/admins get a chooser (Panel / App) after login and a read-only client preview. Set `VITE_APP_URL` (in the panel) and `VITE_PANEL_URL` (in the app) to the deployed URLs so switching apps works in production (local dev falls back to `http://localhost:5173` / `http://localhost:5174`). Switching hands the session over in the URL fragment (`#access_token=...&refresh_token=...`), which the receiving app consumes and strips immediately.
 
 ## Local development
 
@@ -57,6 +57,19 @@ Scripts (from the root): `npm run build` (both apps), `npm test` (all workspaces
 - `client`: uses the client app. Reads/writes only their own data.
 - `trainer`: uses the panel. Only their own clients and their own exercises.
 - `admin`: uses the panel. Full read/write on every table and the `exercise-images` bucket (all trainers' clients, profiles, exercises, routines, logs). Intended for the developer to inspect real data. Admins cannot send invites (the `invite-client` function stays trainer-only). Admins can change a profile's `trainer_id`, but nobody can change `role` or `id` from the app.
+
+### Role vs. `trainer_id`
+
+Two independent axes:
+
+- `role` = what you **administer** (`client`, `trainer`, `admin`).
+- `trainer_id` = whether you **have your own routine**. A profile is a *trainee* when `trainer_id is not null`, whatever its role.
+
+So a trainer can train too (`trainer_id` = their own id) and an admin can be trained by a trainer. Trainees appear in the panel's client list (the viewer's own row is labelled "Vos"; admins see every trainee plus every `client`). In the client app, trainee staff choose between **Mi rutina** (fully writable, their own data) and a read-only **Vista previa** of another client, and can toggle from the header; staff without a `trainer_id` only get the preview. RLS already supports this (`is_trainer_of()` is true for a trainer's own row when `trainer_id` = their id). To make a staff member a trainee:
+
+```sql
+update profiles set trainer_id = '<trainer id>' where id = '<staff profile id>';
+```
 
 Apply `supabase/migrations/0002_admin.sql` (SQL editor or `supabase db push`), then promote a user:
 

@@ -1,24 +1,25 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, CircleCheck, PlayCircle } from 'lucide-react'
 import { toISODate } from '@trainer/shared/domain'
 import type { RoutineExercise, WorkoutLog } from '@trainer/shared/domain'
 import { ExerciseImage } from '@trainer/shared/charts'
 import { fetchActiveRoutine, fetchWorkoutLogs } from '@trainer/shared/data-api'
-import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
-import { useAsync } from '@trainer/shared/ui'
-import { useAuth } from '@trainer/shared/auth'
+import { Badge, Button, Card, CardContent, ErrorMessage, PageHeader, Spinner, TextField, useAsync } from '@trainer/shared/ui'
 import { insertWorkoutLog } from '../api'
+import { useViewedClient } from '../viewed-client'
 
 interface SetRowProps {
   setNumber: number
   loggedToday: WorkoutLog | undefined
   suggestedWeight: number | null
   suggestedReps: string
+  readOnly: boolean
   onSave: (weight: number, reps: number) => Promise<void>
 }
 
-/** Presentational row: one set, either already logged today (read-only) or an input pair. */
-function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, onSave }: SetRowProps) {
+/** Presentational row: one set, either already logged today, an input pair, or (preview) read-only. */
+function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, readOnly, onSave }: SetRowProps) {
   const [weight, setWeight] = useState(suggestedWeight?.toString() ?? '')
   const [reps, setReps] = useState(/^\d+$/.test(suggestedReps) ? suggestedReps : '')
   const [saving, setSaving] = useState(false)
@@ -26,11 +27,23 @@ function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, onSave
 
   if (loggedToday) {
     return (
-      <li className="flex items-center justify-between rounded-lg bg-teal-50 px-3 py-2 text-sm">
-        <span>Serie {setNumber}</span>
-        <span className="font-medium text-teal-800">
-          {loggedToday.weight_kg} kg x {loggedToday.reps} - registrada
+      <li className="flex items-center justify-between gap-2 rounded-lg bg-success-muted px-3 py-3 text-sm">
+        <span className="flex items-center gap-2 font-medium">
+          <CircleCheck aria-hidden className="size-4 text-success-foreground" />
+          Serie {setNumber}
         </span>
+        <span className="font-semibold text-success-foreground">
+          {loggedToday.weight_kg} kg x {loggedToday.reps}
+        </span>
+      </li>
+    )
+  }
+
+  if (readOnly) {
+    return (
+      <li className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-3 text-sm text-muted-foreground">
+        <span className="font-medium">Serie {setNumber}</span>
+        <span>Sin registrar hoy</span>
       </li>
     )
   }
@@ -50,12 +63,12 @@ function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, onSave
   const invalid = weight === '' || Number(weight) < 0 || !(Number(reps) > 0)
 
   return (
-    <li className="space-y-1">
-      <div className="flex items-end gap-2">
-        <span className="w-14 pb-3 text-sm">Serie {setNumber}</span>
-        <Input label="Kg" type="number" inputMode="decimal" step="0.5" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} />
-        <Input label="Reps" type="number" inputMode="numeric" min="1" value={reps} onChange={(e) => setReps(e.target.value)} />
-        <Button disabled={saving || invalid} onClick={() => void save()}>
+    <li className="space-y-2 rounded-lg bg-muted/60 p-3">
+      <p className="text-sm font-semibold">Serie {setNumber}</p>
+      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+        <TextField label="Kg" type="number" inputMode="decimal" step="0.5" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} />
+        <TextField label="Reps" type="number" inputMode="numeric" min="1" value={reps} onChange={(e) => setReps(e.target.value)} />
+        <Button disabled={saving || invalid} onClick={() => void save()} aria-label={`Guardar serie ${setNumber}`}>
           Guardar
         </Button>
       </div>
@@ -69,12 +82,14 @@ function ExerciseLogger({
   clientId,
   today,
   history,
+  readOnly,
   onSaved,
 }: {
   re: RoutineExercise
   clientId: string
   today: string
   history: WorkoutLog[]
+  readOnly: boolean
   onSaved: () => void
 }) {
   const mine = history.filter((l) => l.exercise_id === re.exercise_id)
@@ -84,58 +99,68 @@ function ExerciseLogger({
   const lastSets = lastDate ? previous.filter((l) => l.performed_at === lastDate) : []
 
   return (
-    <Card>
-      <ExerciseImage url={re.exercises?.image_url} alt={re.exercises?.name ?? 'Ejercicio'} className="mb-2 h-40 w-full" />
-      <p className="font-medium">{re.exercises?.name}</p>
-      <p className="text-sm text-slate-500">
-        Objetivo: {re.sets} x {re.reps}
-        {re.target_weight_kg !== null && ` @ ${re.target_weight_kg} kg`}
-      </p>
-      {re.notes && <p className="text-xs text-slate-400">{re.notes}</p>}
-      {re.exercises?.video_url && (
-        <a href={re.exercises.video_url} target="_blank" rel="noreferrer" className="text-sm text-teal-700 underline">
-          Ver video
-        </a>
-      )}
-      {lastSets.length > 0 && (
-        <p className="mt-1 text-xs text-slate-500">
-          Última vez ({lastDate}): {lastSets.map((s) => `${s.weight_kg}x${s.reps}`).join(', ')}
-        </p>
-      )}
-      <ul className="mt-3 space-y-2">
-        {Array.from({ length: re.sets }, (_, i) => i + 1).map((n) => {
-          const last = lastSets.find((s) => s.set_number === n)
-          return (
-            <SetRow
-              key={n}
-              setNumber={n}
-              loggedToday={todays.find((l) => l.set_number === n)}
-              suggestedWeight={last?.weight_kg ?? re.target_weight_kg}
-              suggestedReps={last ? String(last.reps) : re.reps}
-              onSave={async (weight, reps) => {
-                await insertWorkoutLog({
-                  client_id: clientId,
-                  routine_exercise_id: re.id,
-                  exercise_id: re.exercise_id,
-                  performed_at: today,
-                  set_number: n,
-                  weight_kg: weight,
-                  reps,
-                })
-                onSaved()
-              }}
-            />
-          )
-        })}
-      </ul>
+    <Card className="overflow-hidden pt-0">
+      <ExerciseImage url={re.exercises?.image_url} alt={re.exercises?.name ?? 'Ejercicio'} className="h-44 w-full rounded-none" />
+      <CardContent className="space-y-1">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-lg leading-tight font-bold break-words">{re.exercises?.name}</p>
+          <Badge variant="default">
+            {re.sets} x {re.reps}
+            {re.target_weight_kg !== null && ` @ ${re.target_weight_kg} kg`}
+          </Badge>
+        </div>
+        {re.notes && <p className="text-sm text-muted-foreground">{re.notes}</p>}
+        {re.exercises?.video_url && (
+          <a
+            href={re.exercises.video_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-link hover:underline"
+          >
+            <PlayCircle aria-hidden className="size-4" />
+            Ver video
+          </a>
+        )}
+        {lastSets.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Última vez ({lastDate}): {lastSets.map((s) => `${s.weight_kg}x${s.reps}`).join(', ')}
+          </p>
+        )}
+        <ul className="space-y-2 pt-3">
+          {Array.from({ length: re.sets }, (_, i) => i + 1).map((n) => {
+            const last = lastSets.find((s) => s.set_number === n)
+            return (
+              <SetRow
+                key={n}
+                setNumber={n}
+                readOnly={readOnly}
+                loggedToday={todays.find((l) => l.set_number === n)}
+                suggestedWeight={last?.weight_kg ?? re.target_weight_kg}
+                suggestedReps={last ? String(last.reps) : re.reps}
+                onSave={async (weight, reps) => {
+                  await insertWorkoutLog({
+                    client_id: clientId,
+                    routine_exercise_id: re.id,
+                    exercise_id: re.exercise_id,
+                    performed_at: today,
+                    set_number: n,
+                    weight_kg: weight,
+                    reps,
+                  })
+                  onSaved()
+                }}
+              />
+            )
+          })}
+        </ul>
+      </CardContent>
     </Card>
   )
 }
 
 export function WorkoutDayPage() {
   const { dayId } = useParams()
-  const { profile } = useAuth()
-  const clientId = profile?.id ?? ''
+  const { clientId, readOnly } = useViewedClient()
   const routine = useAsync(() => fetchActiveRoutine(clientId), [clientId])
   const logs = useAsync(() => fetchWorkoutLogs(clientId), [clientId])
   const today = toISODate()
@@ -146,15 +171,19 @@ export function WorkoutDayPage() {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">{day.name}</h1>
-        <Link to="/" className="text-sm text-teal-700">
-          Volver
-        </Link>
-      </div>
+      <PageHeader
+        title={day.name}
+        subtitle={readOnly ? 'Vista de solo lectura' : undefined}
+        back={
+          <Link to="/" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-link hover:underline">
+            <ArrowLeft aria-hidden className="size-4" />
+            Volver
+          </Link>
+        }
+      />
       <ErrorMessage message={logs.error} />
       {day.routine_exercises.map((re) => (
-        <ExerciseLogger key={re.id} re={re} clientId={clientId} today={today} history={logs.data ?? []} onSaved={logs.reload} />
+        <ExerciseLogger key={re.id} re={re} clientId={clientId} today={today} history={logs.data ?? []} readOnly={readOnly} onSaved={logs.reload} />
       ))}
     </>
   )

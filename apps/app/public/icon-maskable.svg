@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%">
+      <stop offset="0" stop-color="#1B2C48"/>
+      <stop offset="0.6" stop-color="#101827"/>
+      <stop offset="1" stop-color="#080B12"/>
+    </radialGradient>
+    <!-- Chrome: bright top half, hard horizon line, darker bottom that brightens again -->
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.48" stop-color="#E9EEF4"/>
+      <stop offset="0.5" stop-color="#8E9AAB"/>
+      <stop offset="0.7" stop-color="#B7C1CE"/>
+      <stop offset="1" stop-color="#E4E9EF"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#9BE2FF"/>
+      <stop offset="0.45" stop-color="#2AA8FF"/>
+      <stop offset="1" stop-color="#1257D6"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4CC3FF"/>
+      <stop offset="1" stop-color="#1257D6"/>
+    </linearGradient>
+    <linearGradient id="silverRim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4F7FA"/>
+      <stop offset="0.5" stop-color="#9AA6B5"/>
+      <stop offset="1" stop-color="#DDE3EA"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="16"/>
+    </filter>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7"/>
+      <feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.06 0"/>
+    </filter>
+
+    <!-- L: diagonal-cut top terminal, base ending in a sharp wedge -->
+    <path id="L" d="M112 178 L170 150 V298 H256 L230 352 H112 Z"/>
+    <!-- B: chamfered corners, faceted counters, angled spur at top-left -->
+    <path id="B" fill-rule="evenodd"
+      d="M256 160 H370 L400 188 V224 L384 248 L406 270 V322 L374 352 H278 V186 Z
+         M324 198 H352 L360 206 V222 L352 230 H324 Z
+         M324 268 H356 L366 278 V302 L356 312 H324 Z"/>
+    <path id="bolt-shape" d="M296 112 H320 L272 224 H318 L220 398 L254 270 H202 Z"/>
+  </defs>
+
+  <!-- Background + grain -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" filter="url(#grain)"/>
+  <g transform="translate(256 256) scale(0.84) translate(-256 -256)">
+
+  <!-- Glow behind the monogram -->
+  <ellipse cx="262" cy="258" rx="150" ry="110" fill="#1E9BFF" opacity="0.18" filter="url(#glow)"/>
+
+  <g transform="translate(36 0) skewX(-8)">
+    <!-- Side chevrons -->
+    <path d="M58 262 L104 236 L92 258 L104 280 Z" fill="url(#rim)"/>
+    <path d="M70 300 L100 290 L84 312 Z" fill="#2AA8FF" opacity="0.8"/>
+    <path d="M462 262 L416 236 L428 258 L416 280 Z" fill="url(#rim)"/>
+
+    <!-- Extrusion (3D depth) -->
+    <g transform="translate(5 7)" fill="#0B3A7A">
+      <use href="#L"/>
+      <use href="#B"/>
+    </g>
+    <!-- Blue rim light on the letter edges -->
+    <g fill="none" stroke="#4CC3FF" stroke-width="3" opacity="0.55">
+      <use href="#L"/>
+      <use href="#B"/>
+    </g>
+    <!-- Chrome letters -->
+    <use href="#L" fill="url(#chrome)"/>
+    <use href="#B" fill="url(#chrome)"/>
+
+    <!-- Bolt: glow, dark cut-out outline, gradient fill, white core highlight -->
+    <use href="#bolt-shape" fill="#1E9BFF" opacity="0.7" filter="url(#glow)"/>
+    <use href="#bolt-shape" fill="url(#bolt)" stroke="#0A1222" stroke-width="12" stroke-linejoin="round" paint-order="stroke"/>
+    <path d="M308 118 L262 228 H300 L236 360 L274 222 H232 Z" fill="#DFF5FF" opacity="0.45"/>
+  </g>
+  </g>
+</svg>

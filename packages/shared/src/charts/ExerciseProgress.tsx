@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
+import { TrendingUp } from 'lucide-react'
 import { bestSetPerDate, groupLogsByExercise, volumePerDate } from '../domain/progression'
 import type { WorkoutLog } from '../domain/types'
 import { ProgressChart } from './ProgressChart'
-import { Card, Select } from '../ui/ui'
+import { EmptyState, Section, SelectField, StatTile } from '../ui/ui'
 
 interface Props {
   logs: WorkoutLog[]
@@ -18,9 +19,13 @@ export function ExerciseProgress({ logs, exerciseNames }: Props) {
 
   if (ids.length === 0) {
     return (
-      <Card title="Progreso por ejercicio">
-        <p className="text-sm text-slate-500">Todavía no hay registros de entrenamiento.</p>
-      </Card>
+      <Section title="Progreso por ejercicio">
+        <EmptyState
+          icon={<TrendingUp aria-hidden />}
+          title="Todavía no hay registros"
+          description="Cuando se carguen series de entrenamiento, vas a ver acá la evolución de cada ejercicio."
+        />
+      </Section>
     )
   }
 
@@ -29,43 +34,42 @@ export function ExerciseProgress({ logs, exerciseNames }: Props) {
   const last = points[points.length - 1]
 
   return (
-    <Card title="Progreso por ejercicio">
-      <Select label="Ejercicio" value={current} onChange={(e) => setSelected(e.target.value)}>
-        {ids.map((id) => (
-          <option key={id} value={id}>
-            {exerciseNames[id] ?? 'Ejercicio'}
-          </option>
-        ))}
-      </Select>
-      <div className="mt-3">
-        <ProgressChart
-          data={points.map((p) => ({ date: p.date, value: Math.round(p.estimated_1rm * 10) / 10 }))}
-          unit="kg (1RM est.)"
-        />
+    <div className="space-y-4">
+      <Section title="Progreso por ejercicio">
+        <SelectField label="Ejercicio" value={current} onChange={(e) => setSelected(e.target.value)}>
+          {ids.map((id) => (
+            <option key={id} value={id}>
+              {exerciseNames[id] ?? 'Ejercicio'}
+            </option>
+          ))}
+        </SelectField>
+        {last && (
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <StatTile label="Mejor set reciente" value={`${last.weight_kg} kg x ${last.reps}`} hint={last.date} />
+            <StatTile label="1RM estimado" value={`${Math.round(last.estimated_1rm * 10) / 10} kg`} />
+          </div>
+        )}
+      </Section>
+      <div className="grid gap-4 lg:grid-cols-2">
+      <Section title="1RM estimado">
+        <ProgressChart data={points.map((p) => ({ date: p.date, value: Math.round(p.estimated_1rm * 10) / 10 }))} unit="kg" />
+      </Section>
+      <Section title="Volumen por día" description="kg x reps">
+        <ProgressChart data={volume.map((v) => ({ date: v.date, value: Math.round(v.volume) }))} unit="kg" series="chart-2" />
+      </Section>
       </div>
-      <h3 className="mt-4 text-sm font-medium text-slate-700">Volumen por día (kg x reps)</h3>
-      <div className="mt-1">
-        <ProgressChart
-          data={volume.map((v) => ({ date: v.date, value: Math.round(v.volume) }))}
-          unit="kg (volumen)"
-          color="#b45309"
-        />
-      </div>
-      {last && (
-        <p className="mt-2 text-sm text-slate-600">
-          Último mejor set: {last.weight_kg} kg x {last.reps} ({last.date})
-        </p>
-      )}
-      <ul className="mt-3 divide-y divide-slate-100 text-sm">
-        {[...points].reverse().slice(0, 8).map((p) => (
-          <li key={p.date} className="flex justify-between py-1">
-            <span>{p.date}</span>
-            <span>
-              {p.weight_kg} kg x {p.reps}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Card>
+      <Section title="Últimos registros">
+        <ul className="divide-y text-sm">
+          {[...points].reverse().slice(0, 8).map((p) => (
+            <li key={p.date} className="flex justify-between gap-2 py-2">
+              <span className="text-muted-foreground">{p.date}</span>
+              <span className="font-semibold">
+                {p.weight_kg} kg x {p.reps}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    </div>
   )
 }

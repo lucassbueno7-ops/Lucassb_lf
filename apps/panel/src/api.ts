@@ -3,10 +3,13 @@ import { nextPosition } from '@trainer/shared/domain'
 import type { Exercise, Role, Routine } from '@trainer/shared/domain'
 import type { Profile } from '@trainer/shared/auth'
 
-/** Trainers: their own clients. Admins: every client (RLS lets them see all profiles). */
+/**
+ * People with a routine. Trainers: every profile with trainer_id = them (themselves included).
+ * Admins: every trainee (trainer_id not null, any role) plus role='client' profiles.
+ */
 export async function listClients(viewer: { id: string; role: Role }): Promise<Profile[]> {
   let query = supabase.from('profiles').select('id, role, full_name, height_cm, trainer_id')
-  query = viewer.role === 'admin' ? query.eq('role', 'client') : query.eq('trainer_id', viewer.id)
+  query = viewer.role === 'admin' ? query.or('role.eq.client,trainer_id.not.is.null') : query.eq('trainer_id', viewer.id)
   const { data, error } = await query.order('full_name')
   if (error) throw error
   return (data ?? []) as Profile[]

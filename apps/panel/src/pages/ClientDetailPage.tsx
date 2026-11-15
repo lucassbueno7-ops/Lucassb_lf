@@ -1,13 +1,23 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { attendanceSummary } from '@trainer/shared/domain'
-import { toISODate } from '@trainer/shared/domain'
-import { AttendanceSummary } from '@trainer/shared/charts'
-import { BodyMetricsPanel } from '@trainer/shared/charts'
-import { ExerciseProgress } from '@trainer/shared/charts'
+import { ArrowLeft, ClipboardList } from 'lucide-react'
+import { attendanceSummary, toISODate } from '@trainer/shared/domain'
+import { AttendanceSummary, BodyMetricsPanel, ExerciseProgress } from '@trainer/shared/charts'
 import { fetchActiveRoutine, fetchBodyMetrics, fetchExercisesByIds, fetchWorkoutLogs } from '@trainer/shared/data-api'
-import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
-import { useAsync } from '@trainer/shared/ui'
+import {
+  Button,
+  ErrorMessage,
+  PageHeader,
+  Section,
+  Skeleton,
+  SuccessMessage,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  TextField,
+  useAsync,
+} from '@trainer/shared/ui'
 import type { Profile } from '@trainer/shared/auth'
 import { addBodyMetric, getClient, updateClientProfile } from '../api'
 
@@ -34,15 +44,15 @@ function ClientProfileForm({ client, onSaved }: { client: Profile; onSaved: () =
   }
 
   return (
-    <Card title="Perfil">
+    <Section title="Perfil" className="max-w-xl">
       <form onSubmit={onSubmit} className="space-y-3">
-        <Input label="Nombre" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        <Input label="Altura (cm)" type="number" inputMode="decimal" min="1" step="0.1" value={height} onChange={(e) => setHeight(e.target.value)} />
+        <TextField label="Nombre" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <TextField label="Altura (cm)" type="number" inputMode="decimal" min="1" step="0.1" value={height} onChange={(e) => setHeight(e.target.value)} />
         <ErrorMessage message={error} />
-        {saved && <p className="text-sm text-teal-700">Guardado.</p>}
+        <SuccessMessage message={saved ? 'Guardado.' : null} />
         <Button type="submit">Guardar</Button>
       </form>
-    </Card>
+    </Section>
   )
 }
 
@@ -64,12 +74,16 @@ function AddWeightForm({ clientId, onAdded }: { clientId: string; onAdded: () =>
   }
 
   return (
-    <form onSubmit={onSubmit} className="mt-3 flex flex-wrap items-end gap-2">
-      <Input label="Peso (kg)" type="number" inputMode="decimal" step="0.1" min="1" required value={weight} onChange={(e) => setWeight(e.target.value)} className="w-28" />
-      <Input label="Fecha" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
-      <Button type="submit">Agregar</Button>
-      <ErrorMessage message={error} />
-    </form>
+    <Section title="Registrar peso">
+      <form onSubmit={onSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <TextField label="Peso (kg)" type="number" inputMode="decimal" step="0.1" min="1" required value={weight} onChange={(e) => setWeight(e.target.value)} />
+          <TextField label="Fecha" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <ErrorMessage message={error} />
+        <Button type="submit">Agregar</Button>
+      </form>
+    </Section>
   )
 }
 
@@ -94,38 +108,72 @@ export function ClientDetailPage() {
     }
   }, [idsKey])
 
-  if (client.loading) return <Spinner />
+  if (client.loading) {
+    return (
+      <div className="space-y-4" role="status" aria-label="Cargando cliente">
+        <Skeleton className="h-10 w-2/3" />
+        <Skeleton className="h-28" />
+        <Skeleton className="h-64" />
+      </div>
+    )
+  }
   if (!client.data) return <ErrorMessage message={client.error ?? 'Cliente no encontrado.'} />
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">{client.data.full_name || 'Cliente'}</h1>
-        <Link to="/" className="text-sm text-teal-700">
-          Volver
-        </Link>
-      </div>
-      <ClientProfileForm client={client.data} onSaved={client.reload} />
-      <Link
-        to={`/clients/${clientId}/routine`}
-        className="flex min-h-11 items-center justify-center rounded-lg bg-teal-700 px-4 text-sm font-medium text-white"
-      >
-        Editar rutina
-      </Link>
-      {logs.data && !routine.loading && (
-        <AttendanceSummary
-          summary={attendanceSummary(
-            logs.data.map((l) => l.performed_at),
-            routine.data?.routine_days ?? [],
-            toISODate(),
+      <PageHeader
+        title={client.data.full_name || 'Cliente'}
+        subtitle={client.data.height_cm ? `${client.data.height_cm} cm` : undefined}
+        back={
+          <Link to="/" className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-link hover:underline">
+            <ArrowLeft aria-hidden className="size-4" />
+            Clientes
+          </Link>
+        }
+        actions={
+          <Button asChild>
+            <Link to={`/clients/${clientId}/routine`}>
+              <ClipboardList aria-hidden />
+              Editar rutina
+            </Link>
+          </Button>
+        }
+      />
+      <ErrorMessage message={logs.error ?? metrics.error ?? routine.error} />
+
+      <Tabs defaultValue="summary">
+        <TabsList>
+          <TabsTrigger value="summary">Resumen</TabsTrigger>
+          <TabsTrigger value="progress">Progreso</TabsTrigger>
+          <TabsTrigger value="profile">Perfil</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="summary">
+          {logs.data && !routine.loading ? (
+            <AttendanceSummary
+              summary={attendanceSummary(
+                logs.data.map((l) => l.performed_at),
+                routine.data?.routine_days ?? [],
+                toISODate(),
+              )}
+            />
+          ) : (
+            <Skeleton className="h-28" />
           )}
-        />
-      )}
-      <div>
-        <BodyMetricsPanel metrics={metrics.data ?? []} heightCm={client.data.height_cm} />
-        <AddWeightForm clientId={clientId} onAdded={metrics.reload} />
-      </div>
-      <ExerciseProgress logs={logs.data ?? []} exerciseNames={names} />
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <BodyMetricsPanel metrics={metrics.data ?? []} heightCm={client.data.height_cm} />
+            <AddWeightForm clientId={clientId} onAdded={metrics.reload} />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="progress">
+          <ExerciseProgress logs={logs.data ?? []} exerciseNames={names} />
+        </TabsContent>
+
+        <TabsContent value="profile">
+          <ClientProfileForm client={client.data} onSaved={client.reload} />
+        </TabsContent>
+      </Tabs>
     </>
   )
 }

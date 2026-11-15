@@ -1,14 +1,30 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { addDays, attendanceSummary, trainerName, type AttendanceSummary } from '@trainer/shared/domain'
-import { toISODate } from '@trainer/shared/domain'
+import { ChevronRight, CircleCheck, TriangleAlert, UserPlus, Users } from 'lucide-react'
+import { addDays, attendanceBadge, attendanceSummary, displayPersonName, toISODate, trainerName, type AttendanceSummary, type Role } from '@trainer/shared/domain'
 import { lastWorkoutLabel } from '@trainer/shared/charts'
-import { useAuth } from '@trainer/shared/auth'
-import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
-import { useAsync } from '@trainer/shared/ui'
+import { useAuth, type Profile } from '@trainer/shared/auth'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorMessage,
+  PageHeader,
+  Section,
+  Skeleton,
+  SuccessMessage,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TextField,
+  cn,
+  useAsync,
+} from '@trainer/shared/ui'
 import { inviteClient, listClients, listScheduledDays, listTrainers, listTrainingDates } from '../api'
-import type { Profile } from '@trainer/shared/auth'
-import type { Role } from '@trainer/shared/domain'
 
 function InviteClientForm({ onInvited }: { onInvited: () => void }) {
   const [email, setEmail] = useState('')
@@ -36,17 +52,18 @@ function InviteClientForm({ onInvited }: { onInvited: () => void }) {
   }
 
   return (
-    <Card title="Invitar cliente">
+    <Section title="Invitar cliente" description="Le llega un email para elegir su contraseña.">
       <form onSubmit={onSubmit} className="space-y-3">
-        <Input label="Nombre" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-        <Input label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <TextField label="Nombre" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <TextField label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         <ErrorMessage message={error} />
-        {success && <p className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">{success}</p>}
-        <Button type="submit" disabled={submitting}>
+        <SuccessMessage message={success} />
+        <Button type="submit" className="w-full" disabled={submitting}>
+          <UserPlus aria-hidden />
           {submitting ? 'Enviando...' : 'Enviar invitación'}
         </Button>
       </form>
-    </Card>
+    </Section>
   )
 }
 
@@ -78,37 +95,110 @@ async function loadClientRows(viewer: { id: string; role: Role }): Promise<Clien
   }))
 }
 
-function ClientsList({ rows, isAdmin }: { rows: ClientRow[]; isAdmin: boolean }) {
+function StatusBadge({ summary }: { summary: AttendanceSummary }) {
+  const kind = attendanceBadge(summary)
+  if (kind === 'attention') {
+    return (
+      <Badge variant="warning">
+        <TriangleAlert aria-hidden />
+        3+ días sin cargar
+      </Badge>
+    )
+  }
+  if (kind === 'none') return <Badge variant="outline">Sin registros</Badge>
+  return (
+    <Badge variant="success">
+      <CircleCheck aria-hidden />
+      Al día
+    </Badge>
+  )
+}
+
+function weekLabel(summary: AttendanceSummary): string {
+  const { week } = summary
+  return `${week.done}/${week.planned}${week.extra > 0 ? ` (+${week.extra} extra)` : ''}`
+}
+
+function ClientsList({ rows, isAdmin, viewerId }: { rows: ClientRow[]; isAdmin: boolean; viewerId: string }) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-slate-500">
-        {isAdmin ? 'Todavía no hay clientes.' : 'Todavía no tenés clientes. Invitá al primero.'}
-      </p>
+      <EmptyState
+        icon={<Users aria-hidden />}
+        title={isAdmin ? 'Todavía no hay clientes' : 'Todavía no tenés clientes'}
+        description={isAdmin ? undefined : 'Invitá al primero con el formulario.'}
+      />
     )
   }
   return (
-    <ul className="divide-y divide-slate-100">
-      {rows.map(({ client: c, summary, trainerLabel }) => (
-        <li key={c.id} className={summary.needsAttention ? 'rounded-lg bg-amber-50 px-2' : undefined}>
-          <Link to={`/clients/${c.id}`} className="flex min-h-12 items-center justify-between gap-2 py-2">
-            <div>
-              <p className="font-medium">{c.full_name || 'Sin nombre'}</p>
-              {trainerLabel && <p className="text-xs text-slate-500">Entrenador: {trainerLabel}</p>}
-              <p className="text-xs text-slate-500">
-                Último entrenamiento: {lastWorkoutLabel(summary)}
-                {summary.daysSince !== null && ` - ${summary.daysSince} días sin cargar`}
-              </p>
-              <p className="text-xs text-slate-500">
-                Esta semana: {summary.week.done}/{summary.week.planned}
-                {summary.week.extra > 0 && ` (+${summary.week.extra} extra)`}
-              </p>
-              {summary.needsAttention && <p className="text-xs font-medium text-amber-800">3 o más días sin cargar</p>}
-            </div>
-            <span className="text-sm text-teal-700">Ver</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <>
+      {/* Phones and small tablets: one card per client. */}
+      <ul className="space-y-3 md:hidden">
+        {rows.map(({ client: c, summary, trainerLabel }) => (
+          <li key={c.id}>
+            <Link to={`/clients/${c.id}`} className="block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              <Card
+                className={cn(
+                  'gap-2 px-4 py-4 transition-colors hover:border-primary/60',
+                  summary.needsAttention && 'border-warning-border bg-warning-muted',
+                )}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="min-w-0 font-semibold break-words">{displayPersonName(c, viewerId)}</p>
+                  <ChevronRight aria-hidden className="size-5 shrink-0 text-muted-foreground" />
+                </div>
+                <StatusBadge summary={summary} />
+                {trainerLabel && <p className="text-xs text-muted-foreground">Entrenador: {trainerLabel}</p>}
+                <p className="text-sm text-muted-foreground">
+                  Último: {lastWorkoutLabel(summary)} · Semana: {weekLabel(summary)}
+                </p>
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      {/* Desktop: table. */}
+      <Card className="hidden gap-0 overflow-hidden p-0 md:flex">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Cliente</TableHead>
+              {isAdmin && <TableHead>Entrenador</TableHead>}
+              <TableHead>Último entrenamiento</TableHead>
+              <TableHead>Esta semana</TableHead>
+              <TableHead>Estado</TableHead>
+              <TableHead>
+                <span className="sr-only">Acciones</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map(({ client: c, summary, trainerLabel }) => (
+              <TableRow key={c.id} className={cn(summary.needsAttention && 'bg-warning-muted hover:bg-warning-muted')}>
+                <TableCell className="font-semibold">{displayPersonName(c, viewerId)}</TableCell>
+                {isAdmin && <TableCell className="text-muted-foreground">{trainerLabel}</TableCell>}
+                <TableCell className="text-muted-foreground">
+                  {lastWorkoutLabel(summary)}
+                  {summary.daysSince !== null && summary.daysSince > 1 && ` (${summary.daysSince} días sin cargar)`}
+                </TableCell>
+                <TableCell>{weekLabel(summary)}</TableCell>
+                <TableCell>
+                  <StatusBadge summary={summary} />
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button asChild variant="ghost" size="sm">
+                    <Link to={`/clients/${c.id}`} aria-label={`Ver a ${c.id === viewerId ? 'tu rutina' : c.full_name || 'cliente sin nombre'}`}>
+                      Ver
+                      <ChevronRight aria-hidden />
+                    </Link>
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+    </>
   )
 }
 
@@ -120,21 +210,34 @@ export function ClientsPage() {
     () => loadClientRows({ id: viewerId, role: isAdmin ? 'admin' : 'trainer' }),
     [viewerId, isAdmin],
   )
+  const attention = data?.filter((r) => r.summary.needsAttention).length ?? 0
 
   return (
     <>
-      <Card title={isAdmin ? 'Clientes' : 'Mis clientes'}>
-        {loading && <Spinner />}
-        <ErrorMessage message={error} />
-        {data && <ClientsList rows={data} isAdmin={isAdmin} />}
-      </Card>
-      {isAdmin ? (
-        <Card title="Invitar cliente">
-          <p className="text-sm text-slate-500">Las invitaciones las envía el entrenador.</p>
-        </Card>
-      ) : (
-        <InviteClientForm onInvited={reload} />
-      )}
+      <PageHeader
+        title={isAdmin ? 'Clientes' : 'Mis clientes'}
+        subtitle={data ? `${data.length} en total${attention > 0 ? ` · ${attention} con atención` : ''}` : undefined}
+      />
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 space-y-3 lg:col-span-2">
+          <ErrorMessage message={error} />
+          {loading && (
+            <div className="space-y-3" role="status" aria-label="Cargando clientes">
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+              <Skeleton className="h-24" />
+            </div>
+          )}
+          {data && <ClientsList rows={data} isAdmin={isAdmin} viewerId={viewerId} />}
+        </div>
+        {isAdmin ? (
+          <Section title="Invitar cliente">
+            <p className="text-sm text-muted-foreground">Las invitaciones las envía el entrenador.</p>
+          </Section>
+        ) : (
+          <InviteClientForm onInvited={reload} />
+        )}
+      </div>
     </>
   )
 }

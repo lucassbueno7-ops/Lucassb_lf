@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { fetchExercisesByIds, fetchWorkoutLogs } from '@trainer/shared/data-api'
 import { ExerciseProgress } from '@trainer/shared/charts'
-import { ErrorMessage, Spinner } from '@trainer/shared/ui'
-import { useAsync } from '@trainer/shared/ui'
-import { useAuth } from '@trainer/shared/auth'
+import { ErrorMessage, PageHeader, Spinner, useAsync } from '@trainer/shared/ui'
+import { useViewedClient } from '../viewed-client'
 
 export function ProgressPage() {
-  const { profile } = useAuth()
-  const clientId = profile?.id ?? ''
+  const { clientId } = useViewedClient()
   const logs = useAsync(() => fetchWorkoutLogs(clientId), [clientId])
   const [names, setNames] = useState<Record<string, string>>({})
 
@@ -26,6 +24,7 @@ export function ProgressPage() {
   if (logs.loading) return <Spinner />
   return (
     <>
+      <PageHeader title="Progreso" />
       <ErrorMessage message={logs.error} />
       <ExerciseProgress logs={logs.data ?? []} exerciseNames={names} />
     </>

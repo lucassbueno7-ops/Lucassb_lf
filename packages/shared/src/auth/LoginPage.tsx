@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
-import { Button, Card, ErrorMessage, Input, Spinner } from '../ui/ui'
+import { landingPathForRole } from '../domain/roles'
+import { Button } from '../ui/button'
+import { ErrorMessage, Spinner, TextField } from '../ui/ui'
 import { signInWithPassword } from './api'
 import { useAuth } from './auth-context'
+import { AuthShell } from './AuthShell'
 
-export function LoginPage() {
+export function LoginPage({ appName }: { appName?: string }) {
   const { session, profile, loading } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -12,7 +15,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   if (loading) return <Spinner />
-  if (session && profile) return <Navigate to={'/'} replace />
+  // Trainers and admins pick a destination first; clients go straight in.
+  if (session && profile) return <Navigate to={landingPathForRole(profile.role)} replace />
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -28,24 +32,22 @@ export function LoginPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center p-4">
-      <Card title="Ingresar">
-        <form onSubmit={onSubmit} className="space-y-3">
-          <Input label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <Input
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <ErrorMessage message={error} />
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Ingresando...' : 'Ingresar'}
-          </Button>
-        </form>
-      </Card>
-    </div>
+    <AuthShell title="Ingresar" subtitle="Usá tu email y contraseña para continuar." appName={appName}>
+      <form onSubmit={onSubmit} className="space-y-4">
+        <TextField label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        <TextField
+          label="Contraseña"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <ErrorMessage message={error} />
+        <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Ingresando...' : 'Ingresar'}
+        </Button>
+      </form>
+    </AuthShell>
   )
 }

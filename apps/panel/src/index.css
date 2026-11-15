@@ -1,14 +1,5 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "../../../packages/shared/src/styles/theme.css";
 /* Tailwind v4 does not scan node_modules/workspace packages by default. */
 @source "../../../packages/shared/src";
-
-html,
-body,
-#root {
-  min-height: 100%;
-}
-
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
-  padding-bottom: env(safe-area-inset-bottom);
-}

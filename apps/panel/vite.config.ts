@@ -9,5 +9,7 @@ const envDir = fileURLToPath(new URL('../..', import.meta.url))
 export default defineConfig({
   envDir,
   plugins: [react(), tailwindcss()],
+  // Single copy of React-bound packages across the workspace (avoids "invalid hook" blank screens).
+  resolve: { dedupe: ['react', 'react-dom', 'react-router-dom', 'lucide-react'] },
   server: { port: 5174 },
 })

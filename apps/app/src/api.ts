@@ -1,4 +1,5 @@
 import { supabase } from '@trainer/shared/supabase'
+import type { Profile } from '@trainer/shared/auth'
 
 export interface NewWorkoutLog {
   client_id: string
@@ -30,4 +31,19 @@ export async function insertBodyWeight(clientId: string, weightKg: number, measu
 export async function updateOwnProfile(userId: string, patch: { full_name?: string; height_cm?: number | null }) {
   const { error } = await supabase.from('profiles').update(patch).eq('id', userId)
   if (error) throw error
+}
+
+/**
+ * People a trainer/admin can preview: trainees (trainer_id set, any role) plus clients, minus the viewer
+ * ("Mi rutina" covers them). RLS scopes trainers to their own trainees; admins see all.
+ */
+export async function listPreviewClients(viewerId: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, role, full_name, height_cm, trainer_id')
+    .or('role.eq.client,trainer_id.not.is.null')
+    .neq('id', viewerId)
+    .order('full_name')
+  if (error) throw error
+  return (data as Profile[] | null ?? []).filter((p) => p.id !== viewerId)
 }

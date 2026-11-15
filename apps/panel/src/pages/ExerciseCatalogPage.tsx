@@ -1,9 +1,23 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { Dumbbell, ImagePlus, ImageOff, Plus, Trash2, Video } from 'lucide-react'
 import { exerciseOwnerId, trainerName, type Exercise } from '@trainer/shared/domain'
 import { ExerciseImage } from '@trainer/shared/charts'
-import { Button, Card, ErrorMessage, Input, Select, Spinner } from '@trainer/shared/ui'
-import { useAsync } from '@trainer/shared/ui'
-import { useAuth } from '@trainer/shared/auth'
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorMessage,
+  PageHeader,
+  Section,
+  SelectField,
+  Skeleton,
+  TextField,
+  cn,
+  useAsync,
+} from '@trainer/shared/ui'
+import { useAuth, type Profile } from '@trainer/shared/auth'
+import { ConfirmButton } from '../ConfirmButton'
 import {
   createExercise,
   deleteExercise,
@@ -13,7 +27,6 @@ import {
   updateExercise,
   uploadExerciseImage,
 } from '../api'
-import type { Profile } from '@trainer/shared/auth'
 
 function NewExerciseForm({
   viewer,
@@ -63,39 +76,40 @@ function NewExerciseForm({
   }
 
   return (
-    <Card title="Nuevo ejercicio">
+    <Section title="Nuevo ejercicio">
       <form onSubmit={onSubmit} className="space-y-3">
         {isAdmin && (
-          <Select label="Entrenador" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+          <SelectField label="Entrenador" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
             <option value="">Elegir...</option>
             {trainers.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.full_name || 'Sin nombre'}
               </option>
             ))}
-          </Select>
+          </SelectField>
         )}
-        <Input label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
-        <Input label="Grupo muscular" value={group} onChange={(e) => setGroup(e.target.value)} />
-        <Input label="Link de video (opcional)" type="url" value={video} onChange={(e) => setVideo(e.target.value)} />
-        <Input
+        <TextField label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
+        <TextField label="Grupo muscular" value={group} onChange={(e) => setGroup(e.target.value)} />
+        <TextField label="Link de video (opcional)" type="url" value={video} onChange={(e) => setVideo(e.target.value)} />
+        <TextField
           key={fileKey}
           label="Imagen (opcional)"
           type="file"
           accept="image/*"
-          className="py-2"
+          className="h-auto py-2"
           onChange={(e) => setImage(e.target.files?.[0] ?? null)}
         />
         <ErrorMessage message={error} />
-        <Button type="submit" disabled={submitting}>
-          {submitting ? 'Guardando...' : 'Agregar'}
+        <Button type="submit" className="w-full" disabled={submitting}>
+          <Plus aria-hidden />
+          {submitting ? 'Guardando...' : 'Agregar ejercicio'}
         </Button>
       </form>
-    </Card>
+    </Section>
   )
 }
 
-function ExerciseRow({
+function ExerciseCard({
   exercise,
   ownerLabel,
   onChanged,
@@ -162,29 +176,42 @@ function ExerciseRow({
   }
 
   return (
-    <li className="flex items-center justify-between gap-2 py-2">
-      <div className="flex min-w-0 items-center gap-3">
-        <ExerciseImage url={exercise.image_url} alt={exercise.name} className="h-14 w-14 shrink-0" />
-        <div className="min-w-0">
-          <p className="font-medium">{exercise.name}</p>
-          <p className="text-xs text-slate-500">
-            {exercise.muscle_group}
-            {ownerLabel && ` - Entrenador: ${ownerLabel}`}
-            {exercise.video_url && (
-              <>
-                {' - '}
-                <a href={exercise.video_url} target="_blank" rel="noreferrer" className="text-teal-700 underline">
-                  video
-                </a>
-              </>
-            )}
-          </p>
+    <Card className="gap-3 px-4 py-4">
+      <div className="flex items-start gap-3">
+        {exercise.image_url ? (
+          <ExerciseImage url={exercise.image_url} alt={exercise.name} className="size-16 shrink-0" />
+        ) : (
+          <div aria-hidden className="grid size-16 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+            <ImageOff className="size-6" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="font-semibold break-words">{exercise.name}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {exercise.muscle_group && <Badge variant="secondary">{exercise.muscle_group}</Badge>}
+            {ownerLabel && <Badge variant="outline">{ownerLabel}</Badge>}
+          </div>
+          {exercise.video_url && (
+            <a
+              href={exercise.video_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-8 items-center gap-1 text-sm font-medium text-link hover:underline"
+            >
+              <Video aria-hidden className="size-4" />
+              Ver video
+            </a>
+          )}
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+      <div className="flex flex-wrap gap-2">
         <label
-          className={`inline-flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm font-medium text-teal-700 hover:bg-teal-50 ${busy ? 'pointer-events-none opacity-50' : ''}`}
+          className={cn(
+            'inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold text-foreground hover:bg-accent has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
+            busy && 'pointer-events-none opacity-50',
+          )}
         >
+          <ImagePlus aria-hidden className="size-4" />
           {exercise.image_url ? 'Cambiar imagen' : 'Subir imagen'}
           <input type="file" accept="image/*" className="sr-only" disabled={busy} onChange={(e) => void onReplace(e)} />
         </label>
@@ -193,11 +220,19 @@ function ExerciseRow({
             Quitar imagen
           </Button>
         )}
-        <Button variant="ghost" disabled={busy} onClick={() => void onDelete()}>
+        <ConfirmButton
+          variant="ghost"
+          className="text-danger-foreground hover:text-danger-foreground"
+          disabled={busy}
+          title={`¿Eliminar "${exercise.name}"?`}
+          description="Se elimina del catálogo. Si está en uso en una rutina o tiene registros, no se va a poder borrar."
+          onConfirm={() => void onDelete()}
+        >
+          <Trash2 aria-hidden />
           Eliminar
-        </Button>
+        </ConfirmButton>
       </div>
-    </li>
+    </Card>
   )
 }
 
@@ -212,23 +247,34 @@ export function ExerciseCatalogPage() {
 
   return (
     <>
-      <Card title="Catálogo de ejercicios">
-        {loading && <Spinner />}
-        <ErrorMessage message={error ?? actionError} />
-        {data?.length === 0 && <p className="text-sm text-slate-500">El catálogo está vacío.</p>}
-        <ul className="divide-y divide-slate-100">
-          {data?.map((ex) => (
-            <ExerciseRow
-              key={ex.id}
-              exercise={ex}
-              ownerLabel={isAdmin ? trainerName(trainers.data ?? [], ex.trainer_id) : null}
-              onChanged={reload}
-              onError={setActionError}
-            />
-          ))}
-        </ul>
-      </Card>
-      {profile && <NewExerciseForm viewer={profile} trainers={trainers.data ?? []} onCreated={reload} />}
+      <PageHeader title="Ejercicios" subtitle={data ? `${data.length} en el catálogo` : undefined} />
+      <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+        <div className="min-w-0 space-y-3 lg:col-span-2">
+          <ErrorMessage message={error ?? actionError} />
+          {loading && (
+            <div className="space-y-3" role="status" aria-label="Cargando ejercicios">
+              <Skeleton className="h-32" />
+              <Skeleton className="h-32" />
+            </div>
+          )}
+          {data?.length === 0 && (
+            <EmptyState icon={<Dumbbell aria-hidden />} title="El catálogo está vacío" description="Agregá el primer ejercicio con el formulario." />
+          )}
+          <ul className="grid gap-3 xl:grid-cols-2">
+            {data?.map((ex) => (
+              <li key={ex.id} className="min-w-0">
+                <ExerciseCard
+                  exercise={ex}
+                  ownerLabel={isAdmin ? trainerName(trainers.data ?? [], ex.trainer_id) : null}
+                  onChanged={reload}
+                  onError={setActionError}
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+        {profile && <NewExerciseForm viewer={profile} trainers={trainers.data ?? []} onCreated={reload} />}
+      </div>
     </>
   )
 }

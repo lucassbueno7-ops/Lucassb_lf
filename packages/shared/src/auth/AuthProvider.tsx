@@ -1,8 +1,33 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { takePendingHandoff } from '../domain/handoff'
 import { supabase } from '../lib/supabase'
 import { AuthContext, type AuthState, type Profile } from './auth-context'
 import { fetchProfile, signOut as apiSignOut } from './api'
+
+let initialSession: Promise<Session | null> | null = null
+
+/**
+ * Resolves the session once per page load. If the page was opened through a session
+ * handoff, the tokens captured by handoff-boot are installed; otherwise the stored
+ * session is read (getSession also processes invite/recovery tokens in the URL hash).
+ * Cached at module level so React StrictMode's double effect cannot race two attempts.
+ */
+function loadInitialSession(): Promise<Session | null> {
+  initialSession ??= (async () => {
+    const handoff = takePendingHandoff()
+    if (handoff) {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: handoff.accessToken,
+        refresh_token: handoff.refreshToken,
+      })
+      if (!error && data.session) return data.session
+    }
+    const { data } = await supabase.auth.getSession()
+    return data.session
+  })()
+  return initialSession
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -10,10 +35,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // getSession also processes the invite/recovery tokens present in the URL hash.
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      if (!data.session) setLoading(false)
+    void loadInitialSession().then((initial) => {
+      setSession(initial)
+      if (!initial) setLoading(false)
     })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next)
