@@ -17,7 +17,7 @@ supabase/    migrations, edge function, seed
 scripts/     generate-icons.mjs (PNG icons for apps/app)
 ```
 
-Role guarding: the app only admits `role = client` (trainers see a notice pointing to the panel) and the panel only admits `role = trainer` (clients see a notice pointing to the app, with sign-out). Optionally set `VITE_PANEL_URL` (in the app) and `VITE_APP_URL` (in the panel) to show a link in those notices.
+Role guarding: the app only admits `role = client` (trainers see a notice pointing to the panel) and the panel admits `role = trainer` and `role = admin` (clients see a notice pointing to the app, with sign-out). Optionally set `VITE_PANEL_URL` (in the app) and `VITE_APP_URL` (in the panel) to show a link in those notices.
 
 ## Local development
 
@@ -52,6 +52,19 @@ Scripts (from the root): `npm run build` (both apps), `npm test` (all workspaces
    The trigger creates every profile as `client`; `role` and `trainer_id` cannot be changed from the app (only via SQL editor / service role).
 7. Optional: `supabase/seed.sql` inserts common exercises for a trainer (edit the email first).
 
+## Roles
+
+- `client`: uses the client app. Reads/writes only their own data.
+- `trainer`: uses the panel. Only their own clients and their own exercises.
+- `admin`: uses the panel. Full read/write on every table and the `exercise-images` bucket (all trainers' clients, profiles, exercises, routines, logs). Intended for the developer to inspect real data. Admins cannot send invites (the `invite-client` function stays trainer-only). Admins can change a profile's `trainer_id`, but nobody can change `role` or `id` from the app.
+
+Apply `supabase/migrations/0002_admin.sql` (SQL editor or `supabase db push`), then promote a user:
+
+```sql
+update profiles set role = 'admin'
+where id = (select id from auth.users where email = 'you@example.com');
+```
+
 ## Deploy the frontend (Vercel)
 
 Create **two Vercel projects from the same repository**:
@@ -75,6 +88,6 @@ The PWA is the client app (`apps/app`) only.
 
 ## Security notes
 
-- RLS is enabled on every table. Trainers access only clients whose `profiles.trainer_id` is their id (`is_trainer_of()`, SECURITY DEFINER, avoids recursive policies).
+- RLS is enabled on every table. Admins (`is_admin()`) get a separate `*_admin_all` policy per table. Trainers access only clients whose `profiles.trainer_id` is their id (`is_trainer_of()`, SECURITY DEFINER, avoids recursive policies).
 - Clients can read and insert their own workout logs and body metrics; workout logs have no client update/delete policy (append-only history).
 - Invites go through the `invite-client` edge function, which verifies the caller is a trainer.

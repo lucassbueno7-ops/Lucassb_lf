@@ -8,7 +8,7 @@ import { RequireRole } from './RequireRole'
 const fakeSession = { user: { id: 'u1' } } as unknown as Session
 const profile = (role: Profile['role']): Profile => ({ id: 'u1', role, full_name: 'Test', height_cm: null, trainer_id: null })
 
-function renderAt(state: Partial<AuthState>, required: 'trainer' | 'client') {
+function renderAt(state: Partial<AuthState>, required: Profile['role'] | Profile['role'][]) {
   const value: AuthState = {
     session: null,
     profile: null,
@@ -52,6 +52,21 @@ describe('RequireRole', () => {
     renderAt({ session: fakeSession, profile: profile('client') }, 'trainer')
     expect(screen.getByText('wrong app')).toBeInTheDocument()
     expect(screen.queryByText('secret')).not.toBeInTheDocument()
+  })
+
+  it('accepts any of several allowed roles', () => {
+    renderAt({ session: fakeSession, profile: profile('admin') }, ['trainer', 'admin'])
+    expect(screen.getByText('secret')).toBeInTheDocument()
+  })
+
+  it('rejects roles outside a multi-role list', () => {
+    renderAt({ session: fakeSession, profile: profile('client') }, ['trainer', 'admin'])
+    expect(screen.getByText('wrong app')).toBeInTheDocument()
+  })
+
+  it('shows the wrong-app fallback to an admin on a client-only route', () => {
+    renderAt({ session: fakeSession, profile: profile('admin') }, 'client')
+    expect(screen.getByText('wrong app')).toBeInTheDocument()
   })
 
   it('shows the wrong-app fallback to a trainer on a client route', () => {

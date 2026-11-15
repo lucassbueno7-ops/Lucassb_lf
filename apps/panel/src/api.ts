@@ -1,13 +1,23 @@
 import { supabase } from '@trainer/shared/supabase'
 import { nextPosition } from '@trainer/shared/domain'
-import type { Exercise, Routine } from '@trainer/shared/domain'
+import type { Exercise, Role, Routine } from '@trainer/shared/domain'
 import type { Profile } from '@trainer/shared/auth'
 
-export async function listClients(trainerId: string): Promise<Profile[]> {
+/** Trainers: their own clients. Admins: every client (RLS lets them see all profiles). */
+export async function listClients(viewer: { id: string; role: Role }): Promise<Profile[]> {
+  let query = supabase.from('profiles').select('id, role, full_name, height_cm, trainer_id')
+  query = viewer.role === 'admin' ? query.eq('role', 'client') : query.eq('trainer_id', viewer.id)
+  const { data, error } = await query.order('full_name')
+  if (error) throw error
+  return (data ?? []) as Profile[]
+}
+
+/** Admin-only in practice: RLS hides other trainers' profiles from trainers. */
+export async function listTrainers(): Promise<Profile[]> {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, role, full_name, height_cm, trainer_id')
-    .eq('trainer_id', trainerId)
+    .eq('role', 'trainer')
     .order('full_name')
   if (error) throw error
   return (data ?? []) as Profile[]
@@ -53,8 +63,11 @@ export async function addBodyMetric(clientId: string, weightKg: number, measured
 
 // ---- Exercise catalog
 
-export async function listExercises(trainerId: string): Promise<Exercise[]> {
-  const { data, error } = await supabase.from('exercises').select('*').eq('trainer_id', trainerId).order('name')
+/** Exercises of one trainer, or every exercise when `trainerId` is null (admin catalog view). */
+export async function listExercises(trainerId: string | null): Promise<Exercise[]> {
+  let query = supabase.from('exercises').select('*')
+  if (trainerId) query = query.eq('trainer_id', trainerId)
+  const { data, error } = await query.order('name')
   if (error) throw error
   return (data ?? []) as Exercise[]
 }

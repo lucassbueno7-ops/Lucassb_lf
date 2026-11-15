@@ -1,13 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { addDays, attendanceSummary, type AttendanceSummary } from '@trainer/shared/domain'
+import { addDays, attendanceSummary, trainerName, type AttendanceSummary } from '@trainer/shared/domain'
 import { toISODate } from '@trainer/shared/domain'
 import { lastWorkoutLabel } from '@trainer/shared/charts'
 import { useAuth } from '@trainer/shared/auth'
 import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
 import { useAsync } from '@trainer/shared/ui'
-import { inviteClient, listClients, listScheduledDays, listTrainingDates } from '../api'
+import { inviteClient, listClients, listScheduledDays, listTrainers, listTrainingDates } from '../api'
 import type { Profile } from '@trainer/shared/auth'
+import type { Role } from '@trainer/shared/domain'
 
 function InviteClientForm({ onInvited }: { onInvited: () => void }) {
   const [email, setEmail] = useState('')
@@ -54,35 +55,45 @@ const ACTIVITY_WINDOW_DAYS = 30
 interface ClientRow {
   client: Profile
   summary: AttendanceSummary
+  /** Only set for admins, who see clients of every trainer. */
+  trainerLabel: string | null
 }
 
 /** Three queries total (clients, training dates, scheduled days), joined in memory with domain functions. */
-async function loadClientRows(trainerId: string): Promise<ClientRow[]> {
-  const clients = await listClients(trainerId)
+async function loadClientRows(viewer: { id: string; role: Role }): Promise<ClientRow[]> {
+  const isAdmin = viewer.role === 'admin'
+  const clients = await listClients(viewer)
   const today = toISODate()
-  const [dates, scheduled] = await Promise.all([
+  const [dates, scheduled, trainers] = await Promise.all([
     listTrainingDates(addDays(today, -ACTIVITY_WINDOW_DAYS)),
     listScheduledDays(clients.map((c) => c.id)),
+    isAdmin ? listTrainers() : Promise.resolve([]),
   ])
   const datesByClient: Record<string, string[]> = {}
   for (const row of dates) (datesByClient[row.client_id] ??= []).push(row.performed_at)
   return clients.map((client) => ({
     client,
     summary: attendanceSummary(datesByClient[client.id] ?? [], scheduled[client.id] ?? [], today),
+    trainerLabel: isAdmin ? trainerName(trainers, client.trainer_id) : null,
   }))
 }
 
-function ClientsList({ rows }: { rows: ClientRow[] }) {
+function ClientsList({ rows, isAdmin }: { rows: ClientRow[]; isAdmin: boolean }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-slate-500">Todavía no tenés clientes. Invitá al primero.</p>
+    return (
+      <p className="text-sm text-slate-500">
+        {isAdmin ? 'Todavía no hay clientes.' : 'Todavía no tenés clientes. Invitá al primero.'}
+      </p>
+    )
   }
   return (
     <ul className="divide-y divide-slate-100">
-      {rows.map(({ client: c, summary }) => (
+      {rows.map(({ client: c, summary, trainerLabel }) => (
         <li key={c.id} className={summary.needsAttention ? 'rounded-lg bg-amber-50 px-2' : undefined}>
           <Link to={`/clients/${c.id}`} className="flex min-h-12 items-center justify-between gap-2 py-2">
             <div>
               <p className="font-medium">{c.full_name || 'Sin nombre'}</p>
+              {trainerLabel && <p className="text-xs text-slate-500">Entrenador: {trainerLabel}</p>}
               <p className="text-xs text-slate-500">
                 Último entrenamiento: {lastWorkoutLabel(summary)}
                 {summary.daysSince !== null && ` - ${summary.daysSince} días sin cargar`}
@@ -103,17 +114,27 @@ function ClientsList({ rows }: { rows: ClientRow[] }) {
 
 export function ClientsPage() {
   const { profile } = useAuth()
-  const trainerId = profile?.id ?? ''
-  const { data, loading, error, reload } = useAsync(() => loadClientRows(trainerId), [trainerId])
+  const viewerId = profile?.id ?? ''
+  const isAdmin = profile?.role === 'admin'
+  const { data, loading, error, reload } = useAsync(
+    () => loadClientRows({ id: viewerId, role: isAdmin ? 'admin' : 'trainer' }),
+    [viewerId, isAdmin],
+  )
 
   return (
     <>
-      <Card title="Mis clientes">
+      <Card title={isAdmin ? 'Clientes' : 'Mis clientes'}>
         {loading && <Spinner />}
         <ErrorMessage message={error} />
-        {data && <ClientsList rows={data} />}
+        {data && <ClientsList rows={data} isAdmin={isAdmin} />}
       </Card>
-      <InviteClientForm onInvited={reload} />
+      {isAdmin ? (
+        <Card title="Invitar cliente">
+          <p className="text-sm text-slate-500">Las invitaciones las envía el entrenador.</p>
+        </Card>
+      ) : (
+        <InviteClientForm onInvited={reload} />
+      )}
     </>
   )
 }

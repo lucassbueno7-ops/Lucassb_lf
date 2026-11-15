@@ -23,7 +23,7 @@ const panelUrl = import.meta.env.VITE_PANEL_URL as string | undefined
 const trainerNotice = (
   <WrongAppNotice
     title="Esta es la app de clientes"
-    message="Tu cuenta es de entrenador. Usá el panel de entrenadores para gestionar clientes y rutinas."
+    message="Tu cuenta es de entrenador o administrador. Usá el panel de entrenadores para gestionar clientes y rutinas."
     href={panelUrl}
     linkLabel="Ir al panel"
   />

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { nextPosition } from '@trainer/shared/domain'
+import { catalogTrainerForClient, nextPosition } from '@trainer/shared/domain'
 import type { Exercise, Routine, RoutineDay } from '@trainer/shared/domain'
 import { fetchActiveRoutine } from '@trainer/shared/data-api'
 import { Button, Card, ErrorMessage, Input, Select, Spinner } from '@trainer/shared/ui'
@@ -13,6 +13,7 @@ import {
   deleteDay,
   deleteRoutine,
   deleteRoutineExercise,
+  getClient,
   listExercises,
   renameDay,
   setDayWeekdays,
@@ -216,9 +217,15 @@ function RoutineEditor({ routine, catalog, onChange }: { routine: Routine; catal
 export function RoutineEditorPage() {
   const { clientId = '' } = useParams()
   const { profile } = useAuth()
-  const trainerId = profile?.id ?? ''
+  const viewerId = profile?.id ?? ''
+  const role = profile?.role ?? 'trainer'
   const routine = useAsync(() => fetchActiveRoutine(clientId), [clientId])
-  const catalog = useAsync(() => listExercises(trainerId), [trainerId])
+  // The picker lists the exercises of the CLIENT's trainer (an admin is not that trainer).
+  const catalog = useAsync(async () => {
+    const client = role === 'admin' ? await getClient(clientId) : null
+    const trainerId = catalogTrainerForClient({ id: viewerId, role }, client)
+    return trainerId ? listExercises(trainerId) : []
+  }, [clientId, viewerId, role])
   const [name, setName] = useState('Rutina')
   const [error, setError] = useState<string | null>(null)
 
@@ -243,7 +250,9 @@ export function RoutineEditorPage() {
       <ErrorMessage message={routine.error ?? catalog.error} />
       {catalog.data?.length === 0 && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Tu catálogo está vacío. Cargá ejercicios en la pestaña Ejercicios.
+          {role === 'admin'
+            ? 'El entrenador de este cliente no tiene ejercicios (o el cliente no tiene entrenador asignado).'
+            : 'Tu catálogo está vacío. Cargá ejercicios en la pestaña Ejercicios.'}
         </p>
       )}
       {routine.data ? (

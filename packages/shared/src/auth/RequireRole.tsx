@@ -5,7 +5,8 @@ import type { Role } from '../domain/types'
 import { Spinner } from '../ui/ui'
 
 interface Props {
-  role: Role
+  /** One allowed role, or several. */
+  role: Role | Role[]
   /** Rendered when the user is signed in but has a different role (e.g. a "wrong app" message). */
   wrongRole: ReactNode
 }
@@ -17,6 +18,7 @@ export function RequireRole({ role, wrongRole }: Props) {
   if (loading) return <Spinner />
   if (!session) return <Navigate to="/login" replace />
   if (!profile) return <Spinner label="Cargando perfil..." />
-  if (profile.role !== role) return <>{wrongRole}</>
+  const allowed = Array.isArray(role) ? role : [role]
+  if (!allowed.includes(profile.role)) return <>{wrongRole}</>
   return <Outlet />
 }

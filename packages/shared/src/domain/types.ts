@@ -1,4 +1,4 @@
-export type Role = 'trainer' | 'client'
+export type Role = 'trainer' | 'client' | 'admin'
 
 export interface WorkoutLog {
   id: string

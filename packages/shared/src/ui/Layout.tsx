@@ -15,6 +15,9 @@ export function Layout({ items, title = 'Trainer App' }: { items: NavItem[]; tit
       <header className="flex items-center justify-between gap-2 bg-teal-700 px-4 py-2 text-white">
         <span className="font-semibold">{title}</span>
         <div className="flex items-center gap-3 text-sm">
+          {profile?.role === 'admin' && (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-semibold uppercase">Admin</span>
+          )}
           <span className="hidden sm:inline">{profile?.full_name}</span>
           <Button variant="onDark" onClick={() => void signOut()}>
             Salir

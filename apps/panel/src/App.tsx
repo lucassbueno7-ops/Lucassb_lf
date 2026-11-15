@@ -28,7 +28,7 @@ export function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
-      <Route element={<RequireRole role="trainer" wrongRole={clientNotice} />}>
+      <Route element={<RequireRole role={['trainer', 'admin']} wrongRole={clientNotice} />}>
         <Route element={<Layout items={NAV} title="Trainer Panel" />}>
           <Route index element={<ClientsPage />} />
           <Route path="clients/:clientId" element={<ClientDetailPage />} />

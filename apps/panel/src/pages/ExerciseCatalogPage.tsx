@@ -1,12 +1,32 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import type { Exercise } from '@trainer/shared/domain'
+import { exerciseOwnerId, trainerName, type Exercise } from '@trainer/shared/domain'
 import { ExerciseImage } from '@trainer/shared/charts'
-import { Button, Card, ErrorMessage, Input, Spinner } from '@trainer/shared/ui'
+import { Button, Card, ErrorMessage, Input, Select, Spinner } from '@trainer/shared/ui'
 import { useAsync } from '@trainer/shared/ui'
 import { useAuth } from '@trainer/shared/auth'
-import { createExercise, deleteExercise, listExercises, removeExerciseImage, updateExercise, uploadExerciseImage } from '../api'
+import {
+  createExercise,
+  deleteExercise,
+  listExercises,
+  listTrainers,
+  removeExerciseImage,
+  updateExercise,
+  uploadExerciseImage,
+} from '../api'
+import type { Profile } from '@trainer/shared/auth'
 
-function NewExerciseForm({ trainerId, onCreated }: { trainerId: string; onCreated: () => void }) {
+function NewExerciseForm({
+  viewer,
+  trainers,
+  onCreated,
+}: {
+  viewer: Profile
+  /** Selectable owners; only used (and shown) for admins. */
+  trainers: Profile[]
+  onCreated: () => void
+}) {
+  const isAdmin = viewer.role === 'admin'
+  const [ownerId, setOwnerId] = useState('')
   const [name, setName] = useState('')
   const [group, setGroup] = useState('')
   const [video, setVideo] = useState('')
@@ -18,6 +38,8 @@ function NewExerciseForm({ trainerId, onCreated }: { trainerId: string; onCreate
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    const trainerId = exerciseOwnerId(viewer, ownerId)
+    if (!trainerId) return setError('Elegí el entrenador dueño del ejercicio.')
     setSubmitting(true)
     try {
       const image_url = image ? await uploadExerciseImage(trainerId, image) : null
@@ -43,6 +65,16 @@ function NewExerciseForm({ trainerId, onCreated }: { trainerId: string; onCreate
   return (
     <Card title="Nuevo ejercicio">
       <form onSubmit={onSubmit} className="space-y-3">
+        {isAdmin && (
+          <Select label="Entrenador" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+            <option value="">Elegir...</option>
+            {trainers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.full_name || 'Sin nombre'}
+              </option>
+            ))}
+          </Select>
+        )}
         <Input label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
         <Input label="Grupo muscular" value={group} onChange={(e) => setGroup(e.target.value)} />
         <Input label="Link de video (opcional)" type="url" value={video} onChange={(e) => setVideo(e.target.value)} />
@@ -65,10 +97,12 @@ function NewExerciseForm({ trainerId, onCreated }: { trainerId: string; onCreate
 
 function ExerciseRow({
   exercise,
+  ownerLabel,
   onChanged,
   onError,
 }: {
   exercise: Exercise
+  ownerLabel: string | null
   onChanged: () => void
   onError: (message: string | null) => void
 }) {
@@ -135,6 +169,7 @@ function ExerciseRow({
           <p className="font-medium">{exercise.name}</p>
           <p className="text-xs text-slate-500">
             {exercise.muscle_group}
+            {ownerLabel && ` - Entrenador: ${ownerLabel}`}
             {exercise.video_url && (
               <>
                 {' - '}
@@ -168,8 +203,11 @@ function ExerciseRow({
 
 export function ExerciseCatalogPage() {
   const { profile } = useAuth()
-  const trainerId = profile?.id ?? ''
-  const { data, loading, error, reload } = useAsync(() => listExercises(trainerId), [trainerId])
+  const viewerId = profile?.id ?? ''
+  const isAdmin = profile?.role === 'admin'
+  // Admins see every trainer's exercises; trainers only their own.
+  const { data, loading, error, reload } = useAsync(() => listExercises(isAdmin ? null : viewerId), [viewerId, isAdmin])
+  const trainers = useAsync(() => (isAdmin ? listTrainers() : Promise.resolve([])), [isAdmin])
   const [actionError, setActionError] = useState<string | null>(null)
 
   return (
@@ -180,11 +218,17 @@ export function ExerciseCatalogPage() {
         {data?.length === 0 && <p className="text-sm text-slate-500">El catálogo está vacío.</p>}
         <ul className="divide-y divide-slate-100">
           {data?.map((ex) => (
-            <ExerciseRow key={ex.id} exercise={ex} onChanged={reload} onError={setActionError} />
+            <ExerciseRow
+              key={ex.id}
+              exercise={ex}
+              ownerLabel={isAdmin ? trainerName(trainers.data ?? [], ex.trainer_id) : null}
+              onChanged={reload}
+              onError={setActionError}
+            />
           ))}
         </ul>
       </Card>
-      <NewExerciseForm trainerId={trainerId} onCreated={reload} />
+      {profile && <NewExerciseForm viewer={profile} trainers={trainers.data ?? []} onCreated={reload} />}
     </>
   )
 }
