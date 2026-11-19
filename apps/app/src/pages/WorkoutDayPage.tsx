@@ -1,45 +1,21 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, CircleCheck, PlayCircle } from 'lucide-react'
-import { toISODate } from '@trainer/shared/domain'
-import type { RoutineExercise, WorkoutLog } from '@trainer/shared/domain'
+import { ArrowLeft, CircleCheck, Pencil, PlayCircle, Save } from 'lucide-react'
+import { buildSetDrafts, planSetSave, toISODate } from '@trainer/shared/domain'
+import type { RoutineExercise, SetDraft, WorkoutLog } from '@trainer/shared/domain'
 import { ExerciseImage } from '@trainer/shared/charts'
 import { fetchActiveRoutine, fetchWorkoutLogs } from '@trainer/shared/data-api'
 import { Badge, Button, Card, CardContent, ErrorMessage, PageHeader, Spinner, TextField, useAsync } from '@trainer/shared/ui'
-import { insertWorkoutLog } from '../api'
+import { insertWorkoutLogs, updateWorkoutLog } from '../api'
 import { useViewedClient } from '../viewed-client'
 
-interface SetRowProps {
-  setNumber: number
-  loggedToday: WorkoutLog | undefined
-  suggestedWeight: number | null
-  suggestedReps: string
-  readOnly: boolean
-  onSave: (weight: number, reps: number) => Promise<void>
-}
+const formatKg = (kg: number) => Number(kg).toLocaleString('es-AR')
 
-/** Presentational row: one set, either already logged today, an input pair, or (preview) read-only. */
-function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, readOnly, onSave }: SetRowProps) {
-  const [weight, setWeight] = useState(suggestedWeight?.toString() ?? '')
-  const [reps, setReps] = useState(/^\d+$/.test(suggestedReps) ? suggestedReps : '')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+const setNumbers = (count: number) => Array.from({ length: count }, (_, i) => i + 1)
 
-  if (loggedToday) {
-    return (
-      <li className="flex items-center justify-between gap-2 rounded-lg bg-success-muted px-3 py-3 text-sm">
-        <span className="flex items-center gap-2 font-medium">
-          <CircleCheck aria-hidden className="size-4 text-success-foreground" />
-          Serie {setNumber}
-        </span>
-        <span className="font-semibold text-success-foreground">
-          {loggedToday.weight_kg} kg x {loggedToday.reps}
-        </span>
-      </li>
-    )
-  }
-
-  if (readOnly) {
+/** Presentational row: one set already logged today, or a placeholder when it was not. */
+function SetSummaryRow({ setNumber, log }: { setNumber: number; log: WorkoutLog | undefined }) {
+  if (!log) {
     return (
       <li className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-3 text-sm text-muted-foreground">
         <span className="font-medium">Serie {setNumber}</span>
@@ -47,35 +23,63 @@ function SetRow({ setNumber, loggedToday, suggestedWeight, suggestedReps, readOn
       </li>
     )
   }
-
-  const save = async () => {
-    setError(null)
-    setSaving(true)
-    try {
-      await onSave(Number(weight), Number(reps))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar.')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const invalid = weight === '' || Number(weight) < 0 || !(Number(reps) > 0)
-
   return (
-    <li className="space-y-2 rounded-lg bg-muted/60 p-3">
-      <p className="text-sm font-semibold">Serie {setNumber}</p>
-      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-        <TextField label="Kg" type="number" inputMode="decimal" step="0.5" min="0" value={weight} onChange={(e) => setWeight(e.target.value)} />
-        <TextField label="Reps" type="number" inputMode="numeric" min="1" value={reps} onChange={(e) => setReps(e.target.value)} />
-        <Button disabled={saving || invalid} onClick={() => void save()} aria-label={`Guardar serie ${setNumber}`}>
-          Guardar
-        </Button>
-      </div>
-      <ErrorMessage message={error} />
+    <li className="flex items-center justify-between gap-2 rounded-lg bg-success-muted px-3 py-3 text-sm">
+      <span className="flex items-center gap-2 font-medium">
+        <CircleCheck aria-hidden className="size-4 text-success-foreground" />
+        Serie {setNumber}
+      </span>
+      <span className="font-semibold text-success-foreground">
+        {formatKg(log.weight_kg)} kg x {log.reps}
+      </span>
     </li>
   )
 }
+
+/** Presentational row: editable kg/reps pair for one set. */
+function SetInputRow({
+  draft,
+  logged,
+  onChange,
+}: {
+  draft: SetDraft
+  logged: boolean
+  onChange: (patch: Partial<SetDraft>) => void
+}) {
+  return (
+    <li className="space-y-2 rounded-lg bg-muted/60 p-3">
+      <p className="flex items-center gap-2 text-sm font-semibold">
+        {logged && <CircleCheck aria-label="Registrada" className="size-4 text-success-foreground" />}
+        Serie {draft.setNumber}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {/* type="text" + inputMode: type="number" drops the "," that Spanish keyboards emit. */}
+        <TextField
+          label="Kg"
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0"
+          value={draft.weight}
+          onChange={(e) => onChange({ weight: e.target.value })}
+        />
+        <TextField
+          label="Reps"
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="off"
+          placeholder="0"
+          value={draft.reps}
+          onChange={(e) => onChange({ reps: e.target.value })}
+        />
+      </div>
+    </li>
+  )
+}
+
+const buildDrafts = (re: RoutineExercise, todays: WorkoutLog[], lastSets: WorkoutLog[]): SetDraft[] =>
+  buildSetDrafts({ sets: re.sets, reps: re.reps, targetWeightKg: re.target_weight_kg }, todays, lastSets)
 
 function ExerciseLogger({
   re,
@@ -97,6 +101,58 @@ function ExerciseLogger({
   const previous = mine.filter((l) => l.performed_at < today)
   const lastDate = previous.length ? previous[previous.length - 1].performed_at : null
   const lastSets = lastDate ? previous.filter((l) => l.performed_at === lastDate) : []
+  const complete = setNumbers(re.sets).every((n) => todays.some((l) => l.set_number === n))
+
+  const [editing, setEditing] = useState(false)
+  const [drafts, setDrafts] = useState<SetDraft[]>(() => buildDrafts(re, todays, lastSets))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Incomplete exercises stay open for input; complete ones show a summary until "Editar".
+  const showInputs = !readOnly && (editing || !complete)
+
+  const startEditing = () => {
+    setDrafts(buildDrafts(re, todays, lastSets))
+    setError(null)
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setError(null)
+    setEditing(false)
+  }
+
+  const updateDraft = (setNumber: number, patch: Partial<SetDraft>) =>
+    setDrafts((ds) => ds.map((d) => (d.setNumber === setNumber ? { ...d, ...patch } : d)))
+
+  const save = async () => {
+    setError(null)
+    const plan = planSetSave(drafts, todays)
+    if (!plan.ok) return setError(plan.error)
+    if (plan.inserts.length === 0 && plan.updates.length === 0) {
+      if (complete) setEditing(false)
+      else setError('Completá al menos una serie para guardar.')
+      return
+    }
+    setSaving(true)
+    try {
+      await insertWorkoutLogs(
+        plan.inserts.map((s) => ({
+          ...s,
+          client_id: clientId,
+          routine_exercise_id: re.id,
+          exercise_id: re.exercise_id,
+          performed_at: today,
+        })),
+      )
+      await Promise.all(plan.updates.map(({ id, ...patch }) => updateWorkoutLog(id, patch)))
+      setEditing(false)
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Card className="overflow-hidden pt-0">
@@ -106,7 +162,7 @@ function ExerciseLogger({
           <p className="text-lg leading-tight font-bold break-words">{re.exercises?.name}</p>
           <Badge variant="default">
             {re.sets} x {re.reps}
-            {re.target_weight_kg !== null && ` @ ${re.target_weight_kg} kg`}
+            {re.target_weight_kg !== null && ` @ ${formatKg(re.target_weight_kg)} kg`}
           </Badge>
         </div>
         {re.notes && <p className="text-sm text-muted-foreground">{re.notes}</p>}
@@ -123,36 +179,53 @@ function ExerciseLogger({
         )}
         {lastSets.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            Última vez ({lastDate}): {lastSets.map((s) => `${s.weight_kg}x${s.reps}`).join(', ')}
+            Última vez ({lastDate}): {lastSets.map((s) => `${formatKg(s.weight_kg)}x${s.reps}`).join(', ')}
           </p>
         )}
-        <ul className="space-y-2 pt-3">
-          {Array.from({ length: re.sets }, (_, i) => i + 1).map((n) => {
-            const last = lastSets.find((s) => s.set_number === n)
-            return (
-              <SetRow
-                key={n}
-                setNumber={n}
-                readOnly={readOnly}
-                loggedToday={todays.find((l) => l.set_number === n)}
-                suggestedWeight={last?.weight_kg ?? re.target_weight_kg}
-                suggestedReps={last ? String(last.reps) : re.reps}
-                onSave={async (weight, reps) => {
-                  await insertWorkoutLog({
-                    client_id: clientId,
-                    routine_exercise_id: re.id,
-                    exercise_id: re.exercise_id,
-                    performed_at: today,
-                    set_number: n,
-                    weight_kg: weight,
-                    reps,
-                  })
-                  onSaved()
-                }}
-              />
-            )
-          })}
-        </ul>
+
+        {showInputs ? (
+          <>
+            <ul className="space-y-2 pt-3">
+              {drafts.map((d) => (
+                <SetInputRow
+                  key={d.setNumber}
+                  draft={d}
+                  logged={todays.some((l) => l.set_number === d.setNumber)}
+                  onChange={(patch) => updateDraft(d.setNumber, patch)}
+                />
+              ))}
+            </ul>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Ya tiene tu última marca: cambiala solo si subiste peso o reps. Dejá vacía una serie que no hiciste.
+            </p>
+            <ErrorMessage message={error} />
+            <div className="flex gap-2 pt-2">
+              {editing && (
+                <Button variant="ghost" disabled={saving} onClick={cancelEditing}>
+                  Cancelar
+                </Button>
+              )}
+              <Button className="flex-1" disabled={saving} onClick={() => void save()}>
+                <Save aria-hidden />
+                {saving ? 'Guardando...' : 'Guardar ejercicio'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <ul className="space-y-2 pt-3">
+              {setNumbers(re.sets).map((n) => (
+                <SetSummaryRow key={n} setNumber={n} log={todays.find((l) => l.set_number === n)} />
+              ))}
+            </ul>
+            {!readOnly && (
+              <Button variant="outline" className="mt-2 w-full" onClick={startEditing}>
+                <Pencil aria-hidden />
+                Editar
+              </Button>
+            )}
+          </>
+        )}
       </CardContent>
     </Card>
   )

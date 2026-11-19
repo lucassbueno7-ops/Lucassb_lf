@@ -11,9 +11,15 @@ export interface NewWorkoutLog {
   reps: number
 }
 
-/** History is append-only: this always inserts, never updates. */
-export async function insertWorkoutLog(log: NewWorkoutLog) {
-  const { error } = await supabase.from('workout_logs').insert(log)
+export async function insertWorkoutLogs(logs: NewWorkoutLog[]) {
+  if (logs.length === 0) return
+  const { error } = await supabase.from('workout_logs').insert(logs)
+  if (error) throw error
+}
+
+/** Corrects an already logged set (RLS: clients only touch their own rows). */
+export async function updateWorkoutLog(id: string, patch: { weight_kg: number; reps: number }) {
+  const { error } = await supabase.from('workout_logs').update(patch).eq('id', id)
   if (error) throw error
 }
 
