@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import { Dumbbell, ImagePlus, ImageOff, Plus, Trash2, Video } from 'lucide-react'
+import { Dumbbell, ImagePlus, ImageOff, Pencil, Plus, Save, Trash2, Video } from 'lucide-react'
 import { exerciseOwnerId, trainerName, type Exercise } from '@trainer/shared/domain'
 import { ExerciseImage } from '@trainer/shared/charts'
 import {
@@ -109,6 +109,52 @@ function NewExerciseForm({
   )
 }
 
+/** Inline form to fix an exercise's name, muscle group or video link (image is managed on the card). */
+function EditExerciseForm({ exercise, onSaved, onCancel }: { exercise: Exercise; onSaved: () => void; onCancel: () => void }) {
+  const [name, setName] = useState(exercise.name)
+  const [group, setGroup] = useState(exercise.muscle_group ?? '')
+  const [video, setVideo] = useState(exercise.video_url ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSubmitting(true)
+    try {
+      await updateExercise(exercise.id, {
+        name: name.trim(),
+        muscle_group: group.trim() || null,
+        video_url: video.trim() || null,
+        image_url: exercise.image_url,
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el ejercicio.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-3" aria-label={`Editar ${exercise.name}`}>
+      <TextField label="Nombre" required value={name} onChange={(e) => setName(e.target.value)} />
+      <TextField label="Grupo muscular" value={group} onChange={(e) => setGroup(e.target.value)} />
+      <TextField label="Link de video (opcional)" type="url" value={video} onChange={(e) => setVideo(e.target.value)} />
+      <ErrorMessage message={error} />
+      <div className="flex gap-2">
+        <Button type="button" variant="ghost" disabled={submitting} onClick={onCancel}>
+          Cancelar
+        </Button>
+        <Button type="submit" className="flex-1" disabled={submitting || !name.trim()}>
+          <Save aria-hidden />
+          {submitting ? 'Guardando...' : 'Guardar cambios'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 function ExerciseCard({
   exercise,
   ownerLabel,
@@ -121,6 +167,7 @@ function ExerciseCard({
   onError: (message: string | null) => void
 }) {
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const base = {
     name: exercise.name,
@@ -185,6 +232,18 @@ function ExerciseCard({
             <ImageOff className="size-6" />
           </div>
         )}
+        {editing ? (
+          <div className="min-w-0 flex-1">
+            <EditExerciseForm
+              exercise={exercise}
+              onCancel={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                onChanged()
+              }}
+            />
+          </div>
+        ) : (
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-semibold break-words">{exercise.name}</p>
           <div className="flex flex-wrap items-center gap-1.5">
@@ -203,8 +262,15 @@ function ExerciseCard({
             </a>
           )}
         </div>
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
+        {!editing && (
+          <Button variant="ghost" disabled={busy} onClick={() => setEditing(true)}>
+            <Pencil aria-hidden />
+            Editar
+          </Button>
+        )}
         <label
           className={cn(
             'inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold text-foreground hover:bg-accent has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
